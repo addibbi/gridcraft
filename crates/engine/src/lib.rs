@@ -142,6 +142,22 @@ impl DocState {
     pub fn is_dirty(&self) -> bool {
         !Arc::ptr_eq(&self.wb, &self.saved)
     }
+    /// Reinterprets formula date text in the session's region, preserving the saved state.
+    /// Undo/redo uses this too: a history snapshot must not restore an old application option.
+    pub(crate) fn apply_region(&mut self, region: &'static gridcraft_core::Region) {
+        if *self.wb.region == *region {
+            return;
+        }
+        let dirty = self.is_dirty();
+        let mut wb = (*self.wb).clone();
+        wb.region = region;
+        self.calc.recalc_all(&mut wb);
+        self.wb = Arc::new(wb);
+        if !dirty {
+            self.saved = self.wb.clone();
+        }
+        self.revision += 1;
+    }
     pub fn sheet_index(&self) -> usize {
         self.wb.active_sheet
     }
@@ -279,6 +295,23 @@ impl Session {
     pub fn region(&self) -> &'static gridcraft_core::Region {
         gridcraft_core::region::find(&self.prefs.region).unwrap_or_else(gridcraft_core::region::default_region)
     }
+    /// Sets the region (a tag such as `pt-BR`) and recalculates every open document.
+    /// This leaves source formulas, workbook dirty state and PivotTable reports unchanged;
+    /// refresh PivotTables separately after changing their calculated source dates.
+    pub fn set_region(&mut self, tag: &str) -> Result<&'static gridcraft_core::Region> {
+        let region = find_region(tag)?;
+        self.prefs.region = region.tag.into();
+        self.apply_region();
+        Ok(region)
+    }
+    /// Applies `prefs.region` to every open document after preferences were loaded or replaced.
+    /// DATEVALUE and TIMEVALUE recalculate; input commands remain canonical en-US.
+    pub fn apply_region(&mut self) {
+        let region = self.region();
+        for doc in &mut self.docs {
+            doc.apply_region(region);
+        }
+    }
     pub fn documents(&self) -> &[DocState] {
         &self.docs
     }
@@ -302,7 +335,8 @@ impl Session {
     pub fn doc_mut(&mut self) -> Result<&mut DocState> {
         self.active_mut().ok_or(EngineError::NoDocument)
     }
-    pub fn add_document(&mut self, d: DocState) -> usize {
+    pub fn add_document(&mut self, mut d: DocState) -> usize {
+        d.apply_region(self.region());
         self.docs.push(d);
         self.active = self.docs.len() - 1;
         self.active
