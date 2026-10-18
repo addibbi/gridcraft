@@ -18,6 +18,7 @@ pub fn title(name: &str) -> String {
 pub fn build(name: &str) -> Option<Workbook> {
     let mut s = Session::new();
     let mut wb = Workbook::new();
+    wb.region = s.region();
     if let Some(sh) = wb.sheet_mut(0) {
         sh.name = match name {
             "budget" => "Budget".into(),
