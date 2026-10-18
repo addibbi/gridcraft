@@ -10,6 +10,7 @@ const OLD_SOURCE: &str = "Sheet1!$A$1:$D$3";
 const REPAIRED_SOURCE: &str = "Sheet1!$A$1:$C$3";
 const REPORTS: [(&str, &str, &str); 4] = [("Repair1", "F3", "G6"), ("Repair2", "M3", "N6"), ("Repair3", "F12", "G15"), ("Repair4", "M12", "N15")];
 
+/// Build fictional source data with an unused fourth field for repair regressions.
 fn source() -> Session {
     let mut s = Session::new();
     s.new_workbook();
@@ -25,6 +26,7 @@ fn source() -> Session {
     s
 }
 
+/// Insert a named monthly report at a chosen anchor so reports can be tested independently.
 fn add_report(s: &mut Session, source: &str, name: &str, anchor: &str) {
     s.execute(
         "insert.pivotTable",
@@ -33,6 +35,7 @@ fn add_report(s: &mut Session, source: &str, name: &str, anchor: &str) {
     .unwrap();
 }
 
+/// Create up to four reports, then invalidate their shared source by clearing an unused header.
 fn broken_reports(count: usize) -> Session {
     let mut s = source();
     for (name, anchor, total) in REPORTS.iter().take(count) {
@@ -45,10 +48,12 @@ fn broken_reports(count: usize) -> Session {
     s
 }
 
+/// Read an active-sheet value by A1 address for concise report and source assertions.
 fn value(s: &Session, cell: &str) -> Value {
     s.doc().unwrap().wb.active().unwrap().value(CellRef::parse(cell).unwrap())
 }
 
+/// Check the two monthly rows and grand total relative to a report's total cell.
 fn assert_report(s: &Session, total: &str) {
     let total = CellRef::parse(total).unwrap();
     let sh = s.doc().unwrap().wb.active().unwrap();
@@ -60,10 +65,12 @@ fn assert_report(s: &Session, total: &str) {
     assert_eq!(sh.value(CellRef::new(total.row - 1, total.col)), Value::Number(23.0));
 }
 
+/// Inspect a named report's stored source to distinguish repair from cached output.
 fn pivot_source<'a>(s: &'a Session, name: &str) -> &'a str {
     &s.doc().unwrap().wb.active().unwrap().pivots.iter().find(|p| p.name == name).unwrap().source
 }
 
+/// Round-trip a session through XLSX bytes to exercise imported pivot state without fixtures.
 fn reopen(s: &mut Session) -> Session {
     let saved = s.execute("file.saveBytes", json!({"format": "xlsx"})).unwrap();
     let mut reopened = Session::new();
@@ -71,6 +78,7 @@ fn reopen(s: &mut Session) -> Session {
     reopened
 }
 
+/// Require the expected command error while preserving workbook identity and undo/redo lengths.
 fn rejects_without_edit(s: &mut Session, command: &str, params: Json, message: &str) {
     let d = s.doc().unwrap();
     let before = d.wb.clone();
@@ -82,6 +90,7 @@ fn rejects_without_edit(s: &mut Session, command: &str, params: Json, message: &
     assert_eq!((d.undo.len(), d.redo.len()), (undo, redo), "a rejected operation must preserve history");
 }
 
+/// Repair four imported reports with blank unused headers, including undo, redo, and refresh.
 #[test]
 fn four_imported_pivots_with_blank_unused_headers_can_be_repaired() {
     let mut original = broken_reports(4);
@@ -112,6 +121,7 @@ fn four_imported_pivots_with_blank_unused_headers_can_be_repaired() {
     assert_eq!(value(&s, "D1"), Value::Empty, "repair does not invent a header in the old source");
 }
 
+/// Allow an explicit valid replacement when a report's original defined source name is gone.
 #[test]
 fn a_pivot_whose_defined_source_name_was_deleted_can_be_repaired() {
     let mut s = source();
@@ -125,6 +135,7 @@ fn a_pivot_whose_defined_source_name_was_deleted_can_be_repaired() {
     assert_report(&s, "G6");
 }
 
+/// Reject invalid creation, refresh, and replacement without changing the workbook or history.
 #[test]
 fn invalid_sources_still_refuse_creation_refresh_and_replacement() {
     let mut s = broken_reports(1);
@@ -143,6 +154,7 @@ fn invalid_sources_still_refuse_creation_refresh_and_replacement() {
     assert_eq!(pivot_source(&s, "Repair1"), OLD_SOURCE);
 }
 
+/// Reject source repair on a protected sheet or when report expansion would overwrite data.
 #[test]
 fn repairing_a_source_preserves_protection_and_existing_target_data() {
     for protected in [false, true] {
@@ -168,6 +180,7 @@ fn repairing_a_source_preserves_protection_and_existing_target_data() {
     }
 }
 
+/// Preserve the repaired source across XLSX round-trips and refresh from subsequent source edits.
 #[test]
 fn repaired_source_and_report_values_survive_save_open_and_refresh() {
     let mut s = broken_reports(1);

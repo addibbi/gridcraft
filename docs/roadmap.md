@@ -1,6 +1,6 @@
 # Roadmap detail
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-18 · **Change:** minor (repair invalid PivotTable sources) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-18 · **Change:** minor (repair invalid PivotTable sources; document repair contracts and regressions) · **Target:** Microsoft Excel (Microsoft 365)
 
 Forward-looking plan. The one-page summary is [`ROADMAP.md`](../ROADMAP.md); the ranked work
 list is [`gaps.md`](gaps.md); numbers and method are in
@@ -121,6 +121,7 @@ to check our files, and Windows machines with the reported GPU drivers.
 | Date | Change | Summary |
 |---|---|---|
 | 2026-10-18 | minor | Change Data Source validates the replacement instead of requiring a valid old source, enabling repair of imported pivots while preserving validation, protection, rollback and undo/redo |
+| 2026-10-18 | patch | Document source-repair helper contracts, the fictional generator and each regression without changing behavior |
 | 2026-10-11 | minor | PivotTable calculated fields landed |
 | 2026-10-10 | minor | Current focus and M15 updated for the 10-10 merges |
 | 2026-10-10 | minor | Added the alpha gate table (six core workflows; passes, stays alpha) |

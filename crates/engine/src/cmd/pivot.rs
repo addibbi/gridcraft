@@ -526,13 +526,16 @@ fn remove_from_area(cmd: &str, pt: &mut PivotTable, field: &str, area: &str) -> 
 
 // ---------------------------------------------------------------- shared update
 
-/// Applies `f` to the targeted pivot and re-renders it, as one undo step.
+/// Validates the targeted pivot's current source, applies `f`, and re-renders it as one undo step.
 fn update(s: &mut Session, p: &Json, f: impl FnOnce(&mut PivotTable, &pv::Source, &Workbook) -> Result<Json>) -> Result<Json> {
     update_with_source(s, p, None, f)
 }
 
-/// A replacement source is validated instead of the old source, so Change Data Source can
-/// repair a PivotTable whose previous source is no longer valid.
+/// Applies `f` and refreshes the targeted pivot as one atomic, undoable edit.
+///
+/// When `source` is supplied, validate that replacement before invoking `f` instead of
+/// reading the old source. This lets Change Data Source repair an invalid existing source.
+/// Source, protection, and occupied-cell errors leave the workbook and history unchanged.
 fn update_with_source(
     s: &mut Session,
     p: &Json,
@@ -1333,6 +1336,10 @@ fn refresh_all(s: &mut Session, p: &Json) -> Result<Json> {
     })
 }
 
+/// Replaces a pivot's source and refreshes it without requiring the old source to be valid.
+///
+/// Retains fields found in the replacement, preserves the position of the values axis,
+/// and returns the source, dropped field names, and refreshed range. The edit is atomic.
 fn change_source(s: &mut Session, p: &Json) -> Result<Json> {
     const C: &str = "pivot.changeSource";
     if str_param(p, "source").or_else(|| str_param(p, "range")).is_none() {

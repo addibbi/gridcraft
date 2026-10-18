@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use gridcraft_engine::Session;
 use serde_json::json;
 
+/// Write a fictional workbook with an invalid unused source header, refusing to overwrite files.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = std::env::args_os().nth(1).map(PathBuf::from).unwrap_or_else(|| PathBuf::from("pivot-source-repair.xlsx"));
     let mut session = Session::new();
