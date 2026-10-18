@@ -1259,10 +1259,10 @@ pub fn compute(wb: &Workbook, pt: &PivotTable, pivot_sheet: usize) -> Result<Out
         if compact {
             g.set(r, 0, Value::text(pt.row_header_caption.as_deref().unwrap_or("Row Labels")), CellKind::Header, 0, None);
         } else {
-            // One column per row field, Σ Values ("Values") at its place.
+            // One column per row field, Σ Values (its caption, "Values" by default) at its place.
             let mut names: Vec<&str> = row_fields.iter().map(|f| f.header()).collect();
             if let Some(p) = vpos {
-                names.insert(p.min(names.len()), "Values");
+                names.insert(p.min(names.len()), pt.data_caption.as_deref().unwrap_or("Values"));
             }
             for (i, name) in names.into_iter().enumerate() {
                 g.set(r, i, Value::text(name), CellKind::Header, 0, None);

@@ -1872,6 +1872,10 @@ mod tests {
         assert_eq!(text(&s, "A3"), "Region");
         assert_eq!(text(&s, "B3"), "Values");
         assert_eq!(text(&s, "C3"), "Total");
+        // The Values field's caption heads its column, as in Excel's saved reports.
+        edit_pt(&mut s, |p| p.data_caption = Some("Data".into()));
+        assert_eq!(text(&s, "B3"), "Data");
+        edit_pt(&mut s, |p| p.data_caption = None);
         s.execute("pivot.layout", json!({"layout": "compact"})).unwrap();
         // Σ Values before Region: the value fields are the outer items.
         s.execute("pivot.moveField", json!({"field": "Values", "from": "rows", "to": "rows", "position": 0})).unwrap();
