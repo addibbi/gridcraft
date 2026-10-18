@@ -13,6 +13,39 @@ pub enum DateSystem {
     D1904,
 }
 
+/// Order of the day and month in numeric date text. Year-first dates are unambiguous in
+/// either order. This does not select number separators or the interface language.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DateOrder {
+    #[default]
+    Mdy,
+    Dmy,
+}
+
+impl DateOrder {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Mdy => "mdy",
+            Self::Dmy => "dmy",
+        }
+    }
+}
+
+impl std::str::FromStr for DateOrder {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.eq_ignore_ascii_case("mdy") {
+            Ok(Self::Mdy)
+        } else if s.eq_ignore_ascii_case("dmy") {
+            Ok(Self::Dmy)
+        } else {
+            Err("date order must be mdy or dmy")
+        }
+    }
+}
+
 /// A calendar date and time of day.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct DateTime {
@@ -195,6 +228,21 @@ pub const WEEKDAYS: [&str; 7] = ["Sunday", "Monday", "Tuesday", "Wednesday", "Th
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn date_order_codes_and_serialization() {
+        assert_eq!(DateOrder::default(), DateOrder::Mdy);
+        for order in [DateOrder::Mdy, DateOrder::Dmy] {
+            assert_eq!(order.as_str().parse::<DateOrder>(), Ok(order));
+            assert_eq!(order.as_str().to_ascii_uppercase().parse::<DateOrder>(), Ok(order));
+            let json = serde_json::to_string(&order).unwrap();
+            assert_eq!(json, format!("\"{}\"", order.as_str()));
+            assert_eq!(serde_json::from_str::<DateOrder>(&json).unwrap(), order);
+        }
+        for invalid in ["", "ymd", "en-GB", "dmy "] {
+            assert!(invalid.parse::<DateOrder>().is_err());
+        }
+    }
 
     #[test]
     fn serial_from_unix_time() {

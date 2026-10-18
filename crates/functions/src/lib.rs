@@ -15,7 +15,7 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use gridcraft_core::{Array, CellError, DateSystem, Value};
+use gridcraft_core::{Array, CellError, DateOrder, DateSystem, Value};
 
 /// Builds a [`FnSpec`] whose implementation returns `Result<Value, CellError>`.
 ///
@@ -101,6 +101,11 @@ impl Arg {
 /// Services a function may need from the host.
 pub trait Ctx {
     fn date_system(&self) -> DateSystem;
+    /// Order of numeric date text consumed by DATEVALUE and TIMEVALUE. This does not change
+    /// the generic numeric coercion used by other worksheet functions.
+    fn date_order(&self) -> DateOrder {
+        DateOrder::Mdy
+    }
     /// Current local date-time serial.
     fn now_serial(&self) -> f64;
     /// Uniform in [0, 1).

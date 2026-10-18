@@ -25,7 +25,7 @@ pub mod tables;
 use std::sync::Arc;
 
 use gridcraft_calc::Calc;
-use gridcraft_core::{CellRef, RangeRef};
+use gridcraft_core::{CellRef, DateOrder, RangeRef};
 use gridcraft_model::Workbook;
 use serde::Serialize;
 use serde_json::Value as Json;
@@ -142,6 +142,22 @@ impl DocState {
     pub fn is_dirty(&self) -> bool {
         !Arc::ptr_eq(&self.wb, &self.saved)
     }
+    /// Reinterpret formula date text in the application's order, keeping the file's saved state.
+    /// Also used after undo/redo: a history snapshot must not restore an old application option.
+    pub(crate) fn apply_date_order(&mut self, order: DateOrder) {
+        if self.wb.date_order == order {
+            return;
+        }
+        let dirty = self.is_dirty();
+        let mut wb = (*self.wb).clone();
+        wb.date_order = order;
+        self.calc.recalc_all(&mut wb);
+        self.wb = Arc::new(wb);
+        if !dirty {
+            self.saved = self.wb.clone();
+        }
+        self.revision += 1;
+    }
     pub fn sheet_index(&self) -> usize {
         self.wb.active_sheet
     }
@@ -187,6 +203,8 @@ impl DocState {
 #[derive(Clone, Debug, Serialize, serde::Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Prefs {
+    /// Numeric date-text order for cell input, DATEVALUE and TIMEVALUE. Independent of UI language.
+    pub date_order: DateOrder,
     /// After pressing Enter, move the selection: "down", "right", "up", "left", "none".
     pub enter_direction: String,
     pub autocomplete: bool,
@@ -204,6 +222,7 @@ pub struct Prefs {
 impl Default for Prefs {
     fn default() -> Self {
         Prefs {
+            date_order: DateOrder::default(),
             enter_direction: "down".into(),
             autocomplete: true,
             user_name: "GridCraft User".into(),
@@ -285,7 +304,8 @@ impl Session {
     pub fn doc_mut(&mut self) -> Result<&mut DocState> {
         self.active_mut().ok_or(EngineError::NoDocument)
     }
-    pub fn add_document(&mut self, d: DocState) -> usize {
+    pub fn add_document(&mut self, mut d: DocState) -> usize {
+        d.apply_date_order(self.prefs.date_order);
         self.docs.push(d);
         self.active = self.docs.len() - 1;
         self.active
@@ -298,10 +318,19 @@ impl Session {
             }
         }
     }
+    /// Set application date-text order for existing documents and subsequent opens.
+    /// The option does not edit formulas or automatically refresh PivotTable reports.
+    pub fn set_date_order(&mut self, order: DateOrder) {
+        self.prefs.date_order = order;
+        for doc in &mut self.docs {
+            doc.apply_date_order(order);
+        }
+    }
     /// A new blank workbook titled `BookN`.
     pub fn new_workbook(&mut self) -> usize {
         let n = (1..).find(|n| !self.docs.iter().any(|d| d.title == format!("Book{n}") && d.path.is_none())).unwrap_or(1);
         let mut wb = Workbook::new();
+        wb.date_order = self.prefs.date_order;
         for _ in 1..self.prefs.sheets_in_new_workbook.clamp(1, 255) {
             let name = wb.next_sheet_name();
             wb.sheets.push(Arc::new(gridcraft_model::Sheet::new(name)));

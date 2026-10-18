@@ -3,6 +3,25 @@
 Headless GridCraft: inspect, convert, evaluate, script and serve MCP without a window. Errors go to stderr with a
 non-zero exit code.
 
+File subcommands accept `--date-order mdy|dmy` for numeric dates typed into cells and text
+passed to `DATEVALUE`/`TIMEVALUE`. It is applied before opening-time recalculation; `mdy`
+remains the default. For example:
+
+```sh
+gridcraft-cli run --in book.xlsx --date-order dmy --cmd 'data.refreshAll' --print A1:L5
+gridcraft-cli eval '=DATEVALUE("02/01/2026")' --date-order dmy
+```
+
+The second command returns the serial for **2 January**, while `mdy` gives **1 February**.
+The option is independent of UI language and is not saved in workbook files. ISO dates are
+unaffected. Other text coercion (`VALUE`, arithmetic, `YEAR` of text) and number separators
+retain their existing en-US behavior; see [localization-parity.md](localization-parity.md).
+Set the option on the native launch when using `mcp --connect`; the CLI rejects an override
+on a connected session instead of silently ignoring it. A headless MCP session accepts it.
+
+For an original generated XLSX that demonstrates a missing January pivot row and its
+recovery, see [the date-order reproduction](date-order-repro.md).
+
 `.xls` (Excel 97-2003, BIFF8) files are imported with values, formulas, number formats, merges,
 column widths, row heights and defined names; fonts, fills, borders, charts and other objects are
 not imported yet. Import warnings go to stderr. Convert to `.xlsx` to save; `.xls` output is not

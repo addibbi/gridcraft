@@ -1,6 +1,6 @@
 # Localization parity
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** minor (Format Cells dialog looks its labels up in the catalog) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-18 · **Change:** minor (explicit MDY/DMY date-text order) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
 
 Per-language status against Excel, which ships its UI in dozens of languages (Windows language
 packs cover 100+), with localized function names, argument separators, number and date formats,
@@ -25,6 +25,14 @@ right-to-left sheets and full complex-script support. Part of
   separator, en-US number and date formats (`crates/numfmt` says "en-US only"). Users ask for
   localized function names and `;` separators (#45). German with localized numbers and formulas
   is in PR #163 (open).
+- **Explicit numeric date-text order.** `formulas.dateOrder` and the native/CLI
+  `--date-order mdy|dmy` option select month/day/year or day/month/year for typed dates,
+  `DATEVALUE` and `TIMEVALUE`. The default remains `mdy`; the setting is independent of the
+  interface language and is applied before opening-time recalculation. ISO dates and named
+  months keep their existing interpretation. The engine preference is saved with application
+  preferences, not in XLSX or JSON workbooks. This is a targeted part of #889: automatic OS
+  region detection, localized month names, regional number separators and implicit text-to-number
+  coercion (including `VALUE` and `YEAR` of date text) remain gaps.
 - **Script support.** System-font fallback for CJK, Thai and Hebrew landed in #38 (closes #32;
   #142 is still open pending confirmation). There is no complex-text shaping: Arabic and
   Devanagari don't join or reorder, and there is no bidirectional layout. **Sheet Right-to-Left**
@@ -78,6 +86,7 @@ language (none so far) and of localized function names.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-18 | minor | Explicit MDY/DMY order for cell entry, DATEVALUE and TIMEVALUE; native/CLI option and command applied before file recalculation, with generated January/PivotTable regression coverage; broader regional coercion remains open (#889) |
 | 2026-10-12 | minor | Format Cells looks up its tabs, labels, options and note through `Language::tr` (Fill tab keyed `Format Cells\|Fill`); dialog titles and OK/Cancel too. Labels already in a table (Number, Currency, Fill…) show translated; the rest fall back to English until the tables add them |
 | 2026-10-12 | minor | Brazilian Portuguese catalog (`i18n/pt.rs`) grows from 377 to 923 entries: every key the other catalogs translate, including the dialog strings #669 starts looking up (~42%) |
 | 2026-10-11 | minor | German ribbon catalog (`i18n/de.rs`, 266 labels, ~12%); `de` locale tags (de-DE, de-AT, de-CH…) resolve to German. PR #163 (localized German formulas/numbers) still open |

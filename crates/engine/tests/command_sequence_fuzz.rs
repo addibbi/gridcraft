@@ -63,6 +63,7 @@ const EXCLUDED: &[(&str, &str)] = &[
     ("insert.picture", "reads files"),
     ("pageLayout.background", "reads files"),
     ("formulas.calculationOptions", "manual and iterative calculation differ from a full recalc by design"),
+    ("formulas.dateOrder", "application interpretation changes formula values outside undo and is not saved in XLSX; covered by date_order tests"),
 ];
 
 // ---------------------------------------------------------------- deterministic randomness

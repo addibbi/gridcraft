@@ -13,6 +13,9 @@
 //! gridcraft-cli send <port> <method> [json]
 //! gridcraft-cli version | --version
 //! ```
+//!
+//! Commands that load a workbook also accept `--date-order mdy|dmy` (default `mdy`), applied
+//! before the first calculation. With `mcp --connect`, set that option on the app instead.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 #![forbid(unsafe_code)]
 
@@ -32,6 +35,7 @@ macro_rules! outln {
 mod check;
 
 use gridcraft_engine::Session;
+use gridcraft_engine::core::DateOrder;
 use serde_json::{Value, json};
 
 const USAGE: &str = "usage:
@@ -47,7 +51,10 @@ const USAGE: &str = "usage:
   gridcraft-cli functions [--json] [--search X] [--category C]
   gridcraft-cli mcp [--connect PORT] [--in FILE | --sample NAME]
   gridcraft-cli send <port> <method> [json]
-  gridcraft-cli version";
+  gridcraft-cli version
+
+  File commands (info, convert, eval, cat, check, run, mcp) accept --date-order mdy|dmy.
+  The default is mdy. For mcp --connect, set --date-order when launching the app.";
 
 /// stdout went away. A reader that stopped early (a closed pipe) ends the program quietly; any
 /// other write error is reported.
@@ -137,6 +144,9 @@ impl Args {
     fn has(&self, name: &str) -> bool {
         self.switches.iter().any(|s| s == name)
     }
+    fn date_order(&self) -> Result<Option<DateOrder>, String> {
+        self.opt("date-order").map(|value| value.parse().map_err(|e| format!("--date-order: {e}"))).transpose()
+    }
     fn pos(&self, i: usize, what: &str) -> Result<&str, String> {
         self.positional.get(i).map(String::as_str).ok_or_else(|| format!("missing {what}\n{USAGE}"))
     }
@@ -163,16 +173,24 @@ fn exec(s: &mut Session, id: &str, params: Value) -> Result<Value, String> {
     r
 }
 
-fn open(path: &str) -> Result<Session, String> {
+fn session(date_order: Option<DateOrder>) -> Result<Session, String> {
     let mut s = Session::new();
+    if let Some(order) = date_order {
+        exec(&mut s, "formulas.dateOrder", json!({"order": order.as_str()}))?;
+    }
+    Ok(s)
+}
+
+fn open(path: &str, date_order: Option<DateOrder>) -> Result<Session, String> {
+    let mut s = session(date_order)?;
     exec(&mut s, "file.open", json!({"path": path}))?;
     Ok(s)
 }
 
-fn blank() -> Session {
-    let mut s = Session::new();
+fn blank(date_order: Option<DateOrder>) -> Result<Session, String> {
+    let mut s = session(date_order)?;
     s.new_workbook();
-    s
+    Ok(s)
 }
 
 fn activate_sheet(s: &mut Session, sheet: Option<&str>) -> Result<(), String> {
@@ -226,10 +244,10 @@ fn csv_field(s: &str, delim: char) -> String {
 // ---------------------------------------------------------------- subcommands
 
 fn info(args: &[String]) -> Result<(), String> {
-    let a = Args::parse(args, &[], &["json"])?;
+    let a = Args::parse(args, &["date-order"], &["json"])?;
     let path = a.pos(0, "<file>")?;
     a.no_extra(1)?;
-    let mut s = open(path)?;
+    let mut s = open(path, a.date_order()?)?;
     let v = exec(&mut s, "document.inspect", json!({}))?;
     if a.has("json") {
         outln!("{}", pretty(&v));
@@ -267,14 +285,14 @@ fn info(args: &[String]) -> Result<(), String> {
 }
 
 fn convert(args: &[String]) -> Result<(), String> {
-    let a = Args::parse(args, &["sheet"], &[])?;
+    let a = Args::parse(args, &["sheet", "date-order"], &[])?;
     let input = a.pos(0, "<in>")?;
     let out = a.pos(1, "<out>")?;
     a.no_extra(2)?;
     if gridcraft_engine::io::FileKind::from_path(out).is_none() {
         return Err(format!("{out}: unknown output format (use .xlsx, .csv, .tsv, .json or .html)"));
     }
-    let mut s = open(input)?;
+    let mut s = open(input, a.date_order()?)?;
     activate_sheet(&mut s, a.opt("sheet"))?;
     let d = s.doc().map_err(|e| e.to_string())?;
     let bytes = gridcraft_engine::io::save_file_bytes(&d.wb, out).map_err(|e| e.to_string())?;
@@ -284,12 +302,13 @@ fn convert(args: &[String]) -> Result<(), String> {
 }
 
 fn eval(args: &[String]) -> Result<(), String> {
-    let a = Args::parse(args, &["in", "sheet", "cell"], &["json"])?;
+    let a = Args::parse(args, &["in", "sheet", "cell", "date-order"], &["json"])?;
     let formula = a.pos(0, "<formula>")?;
     a.no_extra(1)?;
+    let date_order = a.date_order()?;
     let mut s = match a.opt("in") {
-        Some(p) => open(p)?,
-        None => blank(),
+        Some(p) => open(p, date_order)?,
+        None => blank(date_order)?,
     };
     activate_sheet(&mut s, a.opt("sheet"))?;
     let formula = if formula.starts_with('=') { formula.to_string() } else { format!("={formula}") };
@@ -354,10 +373,10 @@ fn print_range(s: &mut Session, range: Option<&str>, sheet: Option<&str>, formul
 }
 
 fn cat(args: &[String]) -> Result<(), String> {
-    let a = Args::parse(args, &["range", "sheet"], &["formulas", "csv"])?;
+    let a = Args::parse(args, &["range", "sheet", "date-order"], &["formulas", "csv"])?;
     let path = a.pos(0, "<file>")?;
     a.no_extra(1)?;
-    let mut s = open(path)?;
+    let mut s = open(path, a.date_order()?)?;
     print_range(&mut s, a.opt("range"), a.opt("sheet"), a.has("formulas"), a.has("csv"))
 }
 
@@ -382,17 +401,18 @@ fn parse_command(text: &str) -> Result<Option<(String, Value)>, String> {
 }
 
 fn run(args: &[String]) -> Result<(), String> {
-    let a = Args::parse(args, &["in", "sample", "cmd", "script", "out", "print", "sheet"], &["quiet", "csv", "formulas"])?;
+    let a = Args::parse(args, &["in", "sample", "cmd", "script", "out", "print", "sheet", "date-order"], &["quiet", "csv", "formulas"])?;
     a.no_extra(0)?;
+    let date_order = a.date_order()?;
     let mut s = match (a.opt("in"), a.opt("sample")) {
         (Some(_), Some(_)) => return Err("give --in or --sample, not both".into()),
-        (Some(p), None) => open(p)?,
+        (Some(p), None) => open(p, date_order)?,
         (None, Some(name)) => {
-            let mut s = Session::new();
+            let mut s = session(date_order)?;
             exec(&mut s, "file.new", json!({"sample": name}))?;
             s
         }
-        (None, None) => blank(),
+        (None, None) => blank(date_order)?,
     };
     let quiet = a.has("quiet");
     let mut step = 0usize;
@@ -496,10 +516,14 @@ fn functions(args: &[String]) -> Result<(), String> {
 /// started with `gridcraft --control PORT`). JSON-RPC on stdin/stdout; logs on stderr.
 fn mcp(args: &[String]) -> Result<(), String> {
     use gridcraft_mcp::{Backend, Headless, Remote, Server, control_addr};
-    let a = Args::parse(args, &["connect", "in", "sample"], &[])?;
+    let a = Args::parse(args, &["connect", "in", "sample", "date-order"], &[])?;
     a.no_extra(0)?;
+    let date_order = a.date_order()?;
     let backend: Box<dyn Backend> = match a.opt("connect") {
         Some(c) => {
+            if date_order.is_some() {
+                return Err("--date-order cannot be used with --connect; set it when launching the app".into());
+            }
             let addr = control_addr(c);
             Box::new(
                 Remote::connect(&addr)
@@ -508,13 +532,13 @@ fn mcp(args: &[String]) -> Result<(), String> {
         }
         None => {
             let session = match (a.opt("in"), a.opt("sample")) {
-                (Some(p), _) => open(p)?,
+                (Some(p), _) => open(p, date_order)?,
                 (None, Some(name)) => {
-                    let mut s = Session::new();
+                    let mut s = session(date_order)?;
                     exec(&mut s, "file.new", json!({"sample": name}))?;
                     s
                 }
-                (None, None) => blank(),
+                (None, None) => blank(date_order)?,
             };
             Box::new(Headless::with_session(session))
         }
@@ -582,5 +606,28 @@ mod tests {
         assert!(a.has("csv"));
         assert!(Args::parse(&["--nope".to_string()], &[], &[]).is_err());
         assert!(Args::parse(&["--range".to_string()], &["range"], &[]).is_err());
+    }
+
+    #[test]
+    fn date_order_arguments_are_explicit_and_validated() {
+        let args = |values: &[&str]| values.iter().map(|value| value.to_string()).collect::<Vec<_>>();
+        let parse = |values: &[&str]| Args::parse(&args(values), &["date-order"], &[]);
+        assert_eq!(parse(&[]).unwrap().date_order().unwrap(), None);
+        assert_eq!(parse(&["--date-order", "dmy"]).unwrap().date_order().unwrap(), Some(DateOrder::Dmy));
+        assert_eq!(parse(&["--date-order=mdy"]).unwrap().date_order().unwrap(), Some(DateOrder::Mdy));
+        assert!(parse(&["--date-order"]).is_err());
+        assert!(parse(&["--date-order=ymd"]).unwrap().date_order().is_err());
+        assert!(parse(&["--date-order="]).unwrap().date_order().is_err());
+        assert!(mcp(&args(&["--connect", "7979", "--date-order", "dmy"])).unwrap_err().contains("set it when launching the app"));
+    }
+
+    #[test]
+    fn blank_session_applies_date_order_before_creating_the_workbook() {
+        let mut dmy = blank(Some(DateOrder::Dmy)).unwrap();
+        assert_eq!(dmy.doc().unwrap().wb.date_order, DateOrder::Dmy);
+        assert_eq!(exec(&mut dmy, "formulas.evaluate", json!({"formula": "=DATEVALUE(\"13/01/2026\")"})).unwrap(), json!(46035.0));
+        let mut default = blank(None).unwrap();
+        assert_eq!(default.doc().unwrap().wb.date_order, DateOrder::Mdy);
+        assert_eq!(exec(&mut default, "formulas.evaluate", json!({"formula": "=DATEVALUE(\"13/01/2026\")"})).unwrap(), json!({"error": "#VALUE!"}));
     }
 }

@@ -1,6 +1,6 @@
 //! GridCraft desktop app.
 //!
-//! Usage: `gridcraft [--control <port>] [--sample <name>] [files…]`
+//! Usage: `gridcraft [--control <port>] [--sample <name>] [--date-order mdy|dmy] [files…]`
 //!
 //! `--control <port>` (or `GRIDCRAFT_CONTROL_PORT`) starts a localhost JSON-lines control
 //! server: `{"id":1,"method":"ui.inspect","params":{}}` → `{"id":1,"ok":true,"result":…}`.
@@ -22,6 +22,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use gridcraft_engine::Session;
+use gridcraft_engine::core::DateOrder;
 use gridcraft_ui_egui::{Services, SheetApp};
 use serde_json::json;
 
@@ -229,6 +230,27 @@ fn icon() -> Option<egui::IconData> {
     Some(egui::IconData { width: img.width(), height: img.height(), rgba: img.into_raw() })
 }
 
+/// Remove and validate the date override before any workbook is created or opened. All other
+/// startup arguments retain their existing interpretation.
+fn date_order_args(args: &[String]) -> Result<(Vec<String>, Option<DateOrder>), String> {
+    let mut remaining = Vec::new();
+    let mut date_order = None;
+    let mut it = args.iter();
+    while let Some(arg) = it.next() {
+        let value = if arg == "--date-order" {
+            Some(it.next().ok_or("--date-order needs a value (mdy or dmy)")?.as_str())
+        } else {
+            arg.strip_prefix("--date-order=")
+        };
+        if let Some(value) = value {
+            date_order = Some(value.parse().map_err(|e| format!("--date-order: {e}"))?);
+        } else {
+            remaining.push(arg.clone());
+        }
+    }
+    Ok((remaining, date_order))
+}
+
 fn main() -> eframe::Result<()> {
     // First, so the panic hook and every start-up warning are recorded (`logging`).
     let logger = logging::install();
@@ -255,6 +277,13 @@ fn main() -> eframe::Result<()> {
         println!("GridCraft {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
     }
+    let (args, date_order) = match date_order_args(&args) {
+        Ok(parsed) => parsed,
+        Err(e) => {
+            eprintln!("gridcraft: {e}");
+            std::process::exit(2);
+        }
+    };
     let mut control_port: Option<u16> = std::env::var("GRIDCRAFT_CONTROL_PORT").ok().and_then(|p| p.parse().ok());
     let mut sample: Option<String> = None;
     let mut files: Vec<String> = Vec::new();
@@ -288,20 +317,22 @@ fn main() -> eframe::Result<()> {
             None => logger.no_file(),
         }
     }
-    let mut session = Session::new();
+    let mut app = SheetApp::new(Session::new(), services());
+    app.watch_desktop_theme();
+    load_prefs(&mut app);
+    if let Some(order) = date_order {
+        app.session.execute("formulas.dateOrder", json!({"order": order.as_str()})).map_err(|e| eframe::Error::AppCreation(e.to_string().into()))?;
+    }
     if let Some(s) = &sample
-        && let Err(e) = session.execute("file.new", json!({"sample": s}))
+        && let Err(e) = app.session.execute("file.new", json!({"sample": s}))
     {
         log::warn!("sample {s}: {e}");
     }
-    if session.documents().is_empty() {
-        session.new_workbook();
+    if app.session.documents().is_empty() {
+        app.session.new_workbook();
     }
-    let mut app = SheetApp::new(session, services());
-    app.watch_desktop_theme();
     app.after_engine(); // Show warnings from the sample.
     let control_port = control_port;
-    load_prefs(&mut app);
     // Files named on the command line (a double-click on Windows and Linux) open as File › Open
     // opens them: a password-protected one asks for its password, and errors are shown, not
     // only logged. Each replaces the untouched blank Book1, as a file opened from Finder does.
@@ -409,6 +440,32 @@ mod packaging_tests {
         assert_eq!(mac, win);
         for ext in &mac {
             assert!(FileKind::from_path(&format!("book.{ext}")).is_some(), "GridCraft doesn't open .{ext}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod startup_tests {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
+
+    fn args(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| value.to_string()).collect()
+    }
+
+    #[test]
+    fn date_order_override_preserves_other_startup_arguments() {
+        let (remaining, order) = date_order_args(&args(&["--control", "7979", "--date-order", "dmy", "book.xlsx"])).unwrap();
+        assert_eq!(remaining, args(&["--control", "7979", "book.xlsx"]));
+        assert_eq!(order, Some(DateOrder::Dmy));
+        assert_eq!(date_order_args(&args(&["--date-order=mdy"])).unwrap(), (vec![], Some(DateOrder::Mdy)));
+        assert_eq!(date_order_args(&args(&["book.xlsx"])).unwrap(), (args(&["book.xlsx"]), None));
+    }
+
+    #[test]
+    fn date_order_override_rejects_missing_and_invalid_values() {
+        for values in [&["--date-order"][..], &["--date-order", "--sample"], &["--date-order=ymd"], &["--date-order="]] {
+            assert!(date_order_args(&args(values)).is_err(), "{values:?}");
         }
     }
 }

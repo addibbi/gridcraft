@@ -176,7 +176,7 @@ pub(crate) fn input_to_cell(input: &str, sheet: usize, at: CellRef, wb: &mut gri
         }
         return Ok(Some(cell));
     }
-    let parsed = gridcraft_core::parse::parse_input(input, wb.date_system);
+    let parsed = gridcraft_core::parse::parse_input_with_date_order(input, wb.date_system, wb.date_order);
     let mut style = style;
     if let Some(code) = parsed.format {
         let cur = wb.styles.get(style).num_fmt.as_str().to_string();
@@ -596,6 +596,7 @@ fn coalesce(cells: &[CellRef]) -> Vec<RangeRef> {
 
 fn undo(s: &mut Session, p: &Json) -> Result<Json> {
     let steps = u32_param(p, "steps").unwrap_or(1).max(1);
+    let date_order = s.prefs.date_order;
     let d = s.doc_mut()?;
     let mut label = String::new();
     let now = d.wb.clone();
@@ -608,6 +609,7 @@ fn undo(s: &mut Session, p: &Json) -> Result<Json> {
         d.selection = e.selection;
     }
     super::extra::keep_watch_list(&now, &mut d.wb);
+    d.apply_date_order(date_order);
     d.calc.rebuild(&d.wb);
     d.revision += 1;
     Ok(json!({"undone": label}))
@@ -615,6 +617,7 @@ fn undo(s: &mut Session, p: &Json) -> Result<Json> {
 
 fn redo(s: &mut Session, p: &Json) -> Result<Json> {
     let steps = u32_param(p, "steps").unwrap_or(1).max(1);
+    let date_order = s.prefs.date_order;
     let d = s.doc_mut()?;
     let mut label = String::new();
     let now = d.wb.clone();
@@ -627,6 +630,7 @@ fn redo(s: &mut Session, p: &Json) -> Result<Json> {
         d.selection = e.selection;
     }
     super::extra::keep_watch_list(&now, &mut d.wb);
+    d.apply_date_order(date_order);
     d.calc.rebuild(&d.wb);
     d.revision += 1;
     Ok(json!({"redone": label}))

@@ -57,6 +57,15 @@ pub fn specs() -> Vec<CommandSpec> {
         cmd!(noundo "formulas.calculateNow", "Calculate Now", ["Formulas", "Calculation"], Some("F9"), "{}", has_doc, calc_now),
         cmd!(noundo "formulas.calculateSheet", "Calculate Sheet", ["Formulas", "Calculation"], Some("Shift+F9"), "{}", has_doc, calc_now),
         cmd!(
+            noundo "formulas.dateOrder",
+            "Date Text Order",
+            [],
+            None,
+            "{order?: mdy|dmy} → {order}; application option for typed dates, DATEVALUE and TIMEVALUE (default mdy). Recalculates open workbooks; refresh PivotTables separately. Independent of UI language; not stored in XLSX.",
+            always,
+            date_order
+        ),
+        cmd!(
             "formulas.calculationOptions",
             "Calculation Options",
             ["Formulas", "Calculation"],
@@ -554,6 +563,15 @@ fn calc_now(s: &mut Session, _: &Json) -> Result<Json> {
     d.calc.recalc_all(&mut wb);
     d.wb = std::sync::Arc::new(wb);
     Ok(json!({"cells": d.calc.last_recalc_cells}))
+}
+
+fn date_order(s: &mut Session, p: &Json) -> Result<Json> {
+    if let Some(value) = p.get("order") {
+        let text = value.as_str().ok_or_else(|| bad("formulas.dateOrder", "`order` must be mdy or dmy"))?;
+        let order = text.parse().map_err(|message| bad("formulas.dateOrder", message))?;
+        s.set_date_order(order);
+    }
+    Ok(json!({"order": s.prefs.date_order.as_str()}))
 }
 
 fn calc_options(s: &mut Session, p: &Json) -> Result<Json> {

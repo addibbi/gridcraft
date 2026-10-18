@@ -162,7 +162,7 @@ fn json_value(v: &Json, wb: &Workbook) -> Value {
         Json::Bool(b) => Value::Bool(*b),
         Json::Number(n) => n.as_f64().map(Value::number).unwrap_or_default(),
         Json::String(s) if s.is_empty() => Value::Empty,
-        Json::String(s) => gridcraft_core::parse::parse_input(s, wb.date_system).value,
+        Json::String(s) => gridcraft_core::parse::parse_input_with_date_order(s, wb.date_system, wb.date_order).value,
         other => Value::text(other.to_string()),
     }
 }
@@ -1124,6 +1124,16 @@ mod tests {
     use serde_json::json;
 
     use crate::Session;
+
+    #[test]
+    fn scenario_values_use_the_date_entry_order() {
+        let mut wb = gridcraft_model::Workbook::new();
+        wb.date_order = gridcraft_core::DateOrder::Dmy;
+        assert_eq!(super::json_value(&json!("02/01/2026"), &wb), Value::Number(46024.0));
+        assert_eq!(super::json_value(&json!("13/01/2026"), &wb), Value::Number(46035.0));
+        wb.date_order = gridcraft_core::DateOrder::Mdy;
+        assert_eq!(super::json_value(&json!("02/01/2026"), &wb), Value::Number(46054.0));
+    }
 
     fn s() -> Session {
         let mut s = Session::new();

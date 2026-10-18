@@ -6,6 +6,14 @@ Start the desktop app with a control port:
 gridcraft --control 7979            # or GRIDCRAFT_CONTROL_PORT=7979
 ```
 
+Numeric date text defaults to month/day/year. For day/month/year cell entry and
+`DATEVALUE`/`TIMEVALUE`, start with `gridcraft --date-order dmy --control 7979`.
+The application option is independent of UI language; it is applied before files open and
+does not change formula syntax or regional number separators. It can also be queried or set
+with the `formulas.dateOrder` engine command (`{}` or `{"order":"dmy"}`). Setting it
+recalculates existing documents; refresh their PivotTables separately. The preference is
+saved in application preferences, not in XLSX/JSON workbooks.
+
 Then send newline-delimited JSON to `127.0.0.1:7979`. Every request line gets one reply line:
 
 ```json

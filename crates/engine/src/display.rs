@@ -46,7 +46,7 @@ pub fn edit_text(wb: &Workbook, sheet: &Sheet, c: CellRef) -> String {
     if cell.formula.is_some() || !parsed(code).is_date() {
         return raw;
     }
-    let reads_back = |s: &str| matches!(gridcraft_core::parse::parse_input(s, wb.date_system).value, Value::Number(m) if (m - n).abs() < 1e-9);
+    let reads_back = |s: &str| matches!(gridcraft_core::parse::parse_input_with_date_order(s, wb.date_system, wb.date_order).value, Value::Number(m) if (m - n).abs() < 1e-9);
     let shown = format(&cell.value, code, wb).text;
     if reads_back(&shown) {
         return shown;

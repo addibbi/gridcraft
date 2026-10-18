@@ -2,9 +2,10 @@
 //!
 //! Recognises numbers with thousands separators, percentages, currency, scientific notation,
 //! fractions (`1 1/2`), dates (`3/4/2026`, `2026-03-04`, `4-Mar-2026`, `Mar 4, 2026`), times
-//! (`10:30`, `10:30:15 PM`) and date-times. Locale: en-US.
+//! (`10:30`, `10:30:15 PM`) and date-times. Number separators and month names are en-US;
+//! numeric date text defaults to month/day/year, with an explicit day/month/year option.
 
-use crate::date::{DateSystem, MONTHS, serial_from_ymd, time_fraction};
+use crate::date::{DateOrder, DateSystem, MONTHS, serial_from_ymd, time_fraction};
 use crate::value::{CellError, Value};
 
 /// A parsed entry: its value and the number format Excel would apply automatically.
@@ -17,6 +18,12 @@ pub struct Parsed {
 /// Interprets typed cell input (not formulas). Text that isn't a number, date, boolean or error
 /// stays text. A leading apostrophe forces text.
 pub fn parse_input(s: &str, sys: DateSystem) -> Parsed {
+    parse_input_with_date_order(s, sys, DateOrder::Mdy)
+}
+
+/// Like [`parse_input`], with an explicit order for the day and month in numeric date text.
+/// Year-first dates and named months keep their unambiguous order.
+pub fn parse_input_with_date_order(s: &str, sys: DateSystem, order: DateOrder) -> Parsed {
     if s.is_empty() {
         return Parsed { value: Value::Empty, format: None };
     }
@@ -33,7 +40,7 @@ pub fn parse_input(s: &str, sys: DateSystem) -> Parsed {
     if let Some(e) = CellError::parse(t) {
         return Parsed { value: Value::Error(e), format: None };
     }
-    if let Some((n, f)) = parse_numeric(t, sys) {
+    if let Some((n, f)) = parse_numeric(t, sys, order) {
         return Parsed { value: Value::number(n), format: f };
     }
     Parsed { value: Value::text(s), format: None }
@@ -46,16 +53,22 @@ pub fn parse_number_text(s: &str) -> Option<f64> {
 
 /// Like [`parse_number_text`], with date text read in the given workbook date system.
 pub fn parse_number_text_in(s: &str, sys: DateSystem) -> Option<f64> {
-    parse_numeric(s.trim(), sys).map(|(n, _)| n)
+    parse_number_text_with_date_order(s, sys, DateOrder::Mdy)
 }
 
-fn parse_numeric(t: &str, sys: DateSystem) -> Option<(f64, Option<&'static str>)> {
+/// Like [`parse_number_text_in`], with an explicit order for numeric date text. Number
+/// separators remain en-US.
+pub fn parse_number_text_with_date_order(s: &str, sys: DateSystem, order: DateOrder) -> Option<f64> {
+    parse_numeric(s.trim(), sys, order).map(|(n, _)| n)
+}
+
+fn parse_numeric(t: &str, sys: DateSystem, order: DateOrder) -> Option<(f64, Option<&'static str>)> {
     if t.is_empty() {
         return None;
     }
     // Parenthesised negatives: (100) = -100.
     if let Some(inner) = t.strip_prefix('(').and_then(|x| x.strip_suffix(')')) {
-        return parse_numeric(inner.trim(), sys).map(|(n, f)| (-n, f));
+        return parse_numeric(inner.trim(), sys, order).map(|(n, f)| (-n, f));
     }
     if let Some(r) = parse_plain(t) {
         return Some(r);
@@ -63,7 +76,7 @@ fn parse_numeric(t: &str, sys: DateSystem) -> Option<(f64, Option<&'static str>)
     if let Some(r) = parse_fraction(t) {
         return Some((r, Some("# ?/?")));
     }
-    if let Some(r) = parse_datetime(t, sys) {
+    if let Some(r) = parse_datetime(t, sys, order) {
         return Some(r);
     }
     None
@@ -209,7 +222,7 @@ fn parse_time(t: &str) -> Option<(f64, bool, bool)> {
     Some((time_fraction(h, m, s), parts.len() == 3, ampm.is_some()))
 }
 
-fn parse_date(t: &str, sys: DateSystem) -> Option<(f64, &'static str)> {
+fn parse_date(t: &str, sys: DateSystem, order: DateOrder) -> Option<(f64, &'static str)> {
     let t = t.trim().trim_end_matches(',');
     let num = |s: &str| s.trim().parse::<i64>().ok();
     // ISO yyyy-mm-dd or yyyy/mm/dd
@@ -222,9 +235,13 @@ fn parse_date(t: &str, sys: DateSystem) -> Option<(f64, &'static str)> {
         {
             return valid_ymd(sys, y, m, d).map(|s| (s, "yyyy-mm-dd"));
         }
-        if let (Some(m), Some(d), Some(y)) = (num(a), num(b), num(c)) {
+        if let (Some(first), Some(second), Some(y)) = (num(a), num(b), num(c)) {
             let y = if c.len() <= 2 { if y < 30 { 2000 + y } else { 1900 + y } } else { y };
-            return valid_ymd(sys, y, m, d).map(|s| (s, "m/d/yyyy"));
+            let (m, d, format) = match order {
+                DateOrder::Mdy => (first, second, "m/d/yyyy"),
+                DateOrder::Dmy => (second, first, "d/m/yyyy"),
+            };
+            return valid_ymd(sys, y, m, d).map(|s| (s, format));
         }
         // 4-Mar-2026
         if let (Some(d), Some(m), Some(y)) = (num(a), month_from_name(b), num(c)) {
@@ -234,16 +251,19 @@ fn parse_date(t: &str, sys: DateSystem) -> Option<(f64, &'static str)> {
     }
     if parts.len() == 2 {
         let (a, b) = (parts[0].trim(), parts[1].trim());
-        // m/d in the current year is ambiguous without a clock; use month/day of 2026? Excel uses
-        // the current year. We accept d-mmm / mmm-d only with month names, and m/d → current year.
-        if let (Some(m), Some(d)) = (num(a), num(b)) {
+        // m/d or d/m without a year uses the current year. m/yyyy always names a month.
+        if let (Some(first), Some(second)) = (num(a), num(b)) {
             let y = current_year();
+            let (m, d) = match order {
+                DateOrder::Mdy => (first, second),
+                DateOrder::Dmy => (second, first),
+            };
             if (1..=12).contains(&m) && (1..=31).contains(&d) {
                 return valid_ymd(sys, y, m, d).map(|s| (s, "d-mmm"));
             }
             // m/yyyy
-            if (1..=12).contains(&m) && b.len() == 4 {
-                return valid_ymd(sys, d, m, 1).map(|s| (s, "mmm-yy"));
+            if (1..=12).contains(&first) && b.len() == 4 {
+                return valid_ymd(sys, second, first, 1).map(|s| (s, "mmm-yy"));
             }
         }
         if let (Some(d), Some(m)) = (num(a), month_from_name(b)) {
@@ -293,7 +313,7 @@ pub fn current_year() -> i64 {
     2026
 }
 
-fn parse_datetime(t: &str, sys: DateSystem) -> Option<(f64, Option<&'static str>)> {
+fn parse_datetime(t: &str, sys: DateSystem, order: DateOrder) -> Option<(f64, Option<&'static str>)> {
     if let Some((tf, secs, ampm)) = parse_time(t) {
         let f = match (secs, ampm) {
             // 24 hours or more: elapsed hours, so 25:00 shows as 25:00:00, not 1:00.
@@ -305,14 +325,18 @@ fn parse_datetime(t: &str, sys: DateSystem) -> Option<(f64, Option<&'static str>
         };
         return Some((tf, Some(f)));
     }
-    if let Some((d, f)) = parse_date(t, sys) {
+    if let Some((d, f)) = parse_date(t, sys, order) {
         return Some((d, Some(f)));
     }
     // date + time: split at the last space(s) before a time-looking tail.
     for (i, _) in t.match_indices(' ') {
         let (a, b) = (t.get(..i)?, t.get(i + 1..)?);
-        if let (Some((d, _)), Some((tf, _, _))) = (parse_date(a, sys), parse_time(b)) {
-            return Some((d + tf, Some("m/d/yyyy h:mm")));
+        if let (Some((d, _)), Some((tf, _, _))) = (parse_date(a, sys, order), parse_time(b)) {
+            let format = match order {
+                DateOrder::Mdy => "m/d/yyyy h:mm",
+                DateOrder::Dmy => "d/m/yyyy h:mm",
+            };
+            return Some((d + tf, Some(format)));
         }
     }
     None
@@ -382,6 +406,78 @@ mod tests {
         assert_eq!(p("25:00").value, Value::Number(25.0 / 24.0));
         assert_eq!(p("25:00").format, Some("[h]:mm:ss"));
         assert_eq!(p("23:59").format, Some("h:mm"));
+    }
+
+    #[test]
+    fn numeric_date_order_is_explicit() {
+        let dmy = |s| parse_input_with_date_order(s, DateSystem::D1900, DateOrder::Dmy);
+        let jan2 = serial_from_ymd(DateSystem::D1900, 2026, 1, 2).unwrap();
+        let feb1 = serial_from_ymd(DateSystem::D1900, 2026, 2, 1).unwrap();
+        assert_eq!(dmy("02/01/2026").value, Value::Number(jan2));
+        assert_eq!(p("02/01/2026").value, Value::Number(feb1));
+        assert_eq!(dmy("02/01/2026").format, Some("d/m/yyyy"));
+        assert_eq!(p("02/01/2026").format, Some("m/d/yyyy"));
+        assert_eq!(dmy("13/01/2026").value, Value::Number(46035.0));
+        // An invalid date in the selected order never falls back to the other order.
+        assert_eq!(p("13/01/2026").value, Value::text("13/01/2026"));
+        assert_eq!(dmy("01/13/2026").value, Value::text("01/13/2026"));
+        assert_eq!(parse_number_text_with_date_order(" 02/01/2026 ", DateSystem::D1900, DateOrder::Dmy), Some(jan2));
+        assert_eq!(parse_number_text_in("02/01/2026", DateSystem::D1900), Some(feb1));
+    }
+
+    #[test]
+    fn date_order_preserves_unambiguous_dates_and_numbers() {
+        for order in [DateOrder::Mdy, DateOrder::Dmy] {
+            let parse = |s| parse_input_with_date_order(s, DateSystem::D1900, order);
+            for s in ["2026-01-13", "2026/01/13", "2026.01.13", "13-Jan-2026", "January 13, 2026"] {
+                assert_eq!(parse(s).value, Value::Number(46035.0), "{order:?} {s}");
+            }
+            for s in ["42", "1,234.5", "50%", "1 1/2", "12:00", "'02/01/2026", "TRUE", "#N/A"] {
+                assert_eq!(parse(s), p(s), "{order:?} {s}");
+            }
+            assert_eq!(parse("1/2026").value, p("2026-01-01").value);
+            assert_eq!(parse("1/2026").format, Some("mmm-yy"));
+        }
+    }
+
+    #[test]
+    fn date_order_applies_to_short_years_and_missing_years() {
+        let dmy = |s| parse_input_with_date_order(s, DateSystem::D1900, DateOrder::Dmy);
+        assert_eq!(dmy("02/01/26").value, p("2026-01-02").value);
+        assert_eq!(dmy("02/01/30").value, p("1930-01-02").value);
+        assert_eq!(dmy("02/01/99").value, p("1999-01-02").value);
+        let jan2 = serial_from_ymd(DateSystem::D1900, current_year(), 1, 2).unwrap();
+        assert_eq!(dmy("02/01").value, Value::Number(jan2));
+        assert_eq!(p("01/02").value, Value::Number(jan2));
+        assert_eq!(dmy("13/01").value, p("01/13").value);
+        assert_eq!(p("13/01").value, Value::text("13/01"));
+        assert_eq!(dmy("01/13").value, Value::text("01/13"));
+    }
+
+    #[test]
+    fn date_order_applies_to_date_times() {
+        let dmy = |s| parse_input_with_date_order(s, DateSystem::D1900, DateOrder::Dmy);
+        assert_eq!(dmy("13/01/2026 18:00").value, Value::Number(46035.75));
+        assert_eq!(dmy("13/01/2026 6:00 PM").value, Value::Number(46035.75));
+        assert_eq!(dmy("13/01/2026 18:00").format, Some("d/m/yyyy h:mm"));
+        assert_eq!(dmy("02/01/2026 18:00").value, p("2026-01-02 18:00").value);
+        assert_eq!(p("02/01/2026 18:00").value, p("2026-02-01 18:00").value);
+        assert_eq!(dmy("31/04/2026 18:00").value, Value::text("31/04/2026 18:00"));
+    }
+
+    #[test]
+    fn day_first_dates_validate_in_each_date_system() {
+        for sys in [DateSystem::D1900, DateSystem::D1904] {
+            let dmy = |s| parse_input_with_date_order(s, sys, DateOrder::Dmy);
+            assert_eq!(dmy("29/02/1904").value, Value::Number(serial_from_ymd(sys, 1904, 2, 29).unwrap()));
+            assert_eq!(dmy("13/01/2026").value, Value::Number(serial_from_ymd(sys, 2026, 1, 13).unwrap()));
+            for s in ["29/02/2025", "31/04/2026", "00/01/2026", "01/00/2026", "32/01/2026"] {
+                assert_eq!(dmy(s).value, Value::text(s), "{sys:?} {s}");
+            }
+        }
+        assert_eq!(parse_input_with_date_order("29/02/1900", DateSystem::D1900, DateOrder::Dmy).value, Value::Number(60.0));
+        assert_eq!(parse_input_with_date_order("29/02/1900", DateSystem::D1904, DateOrder::Dmy).value, Value::text("29/02/1900"));
+        assert_eq!(parse_input_with_date_order("01/01/1904", DateSystem::D1904, DateOrder::Dmy).value, Value::Number(0.0));
     }
 
     #[test]

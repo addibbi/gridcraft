@@ -96,6 +96,9 @@ impl Ctx for FnCtx<'_, '_> {
     fn date_system(&self) -> gridcraft_core::DateSystem {
         self.ev.host.workbook().date_system
     }
+    fn date_order(&self) -> gridcraft_core::DateOrder {
+        self.ev.host.workbook().date_order
+    }
     fn now_serial(&self) -> f64 {
         self.ev.host.now_serial()
     }

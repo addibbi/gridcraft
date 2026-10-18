@@ -226,10 +226,12 @@ fn forecast_sheet(s: &mut Session, p: &Json) -> Result<Json> {
     let time_param = |key: &str| -> Result<Option<f64>> {
         match p.get(key) {
             Some(Json::Number(n)) => Ok(n.as_f64()),
-            Some(Json::String(t)) if !t.trim().is_empty() => match gridcraft_core::parse::parse_input(t.trim(), sys).value {
-                Value::Number(x) => Ok(Some(x)),
-                _ => Err(bad(CMD, format!("`{key}` is not a number or a date: `{t}`"))),
-            },
+            Some(Json::String(t)) if !t.trim().is_empty() => {
+                match gridcraft_core::parse::parse_input_with_date_order(t.trim(), sys, d.wb.date_order).value {
+                    Value::Number(x) => Ok(Some(x)),
+                    _ => Err(bad(CMD, format!("`{key}` is not a number or a date: `{t}`"))),
+                }
+            }
             None | Some(Json::Null) => Ok(None),
             Some(Json::String(_)) => Ok(None),
             Some(_) => Err(bad(CMD, format!("`{key}` is not a number or a date"))),
@@ -526,6 +528,16 @@ mod tests {
         let sheets = s.doc().unwrap().wb.sheets.len();
         s.execute("edit.undo", json!({})).unwrap();
         assert_eq!(s.doc().unwrap().wb.sheets.len(), sheets - 1);
+    }
+
+    #[test]
+    fn forecast_end_uses_the_date_entry_order() {
+        let mut s = Session::new();
+        s.execute("formulas.dateOrder", json!({"order": "dmy"})).unwrap();
+        s.new_workbook();
+        s.execute("range.setValues", json!({"range": "A1", "values": [["Date", "Value"], [46032, 10], [46033, 12]]})).unwrap();
+        let result = s.execute("data.forecastSheet", json!({"range": "A1:B3", "end": "13/01/2026", "confidenceInterval": false})).unwrap();
+        assert_eq!(result["periods"], 2);
     }
 
     #[test]

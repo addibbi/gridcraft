@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use gridcraft_core::DateSystem;
+use gridcraft_core::{DateOrder, DateSystem};
 use gridcraft_formula::Expr;
 use serde::{Deserialize, Serialize};
 
@@ -92,6 +92,10 @@ pub struct Workbook {
     pub styles: StyleTable,
     pub theme: Theme,
     pub date_system: DateSystem,
+    /// Application date-text interpretation, supplied by the session before recalculation.
+    /// XLSX has no workbook regional setting; this runtime context is not saved with the file.
+    #[serde(skip)]
+    pub date_order: DateOrder,
     pub calc: CalcSettings,
     pub active_sheet: usize,
     pub props: DocProps,
@@ -137,6 +141,7 @@ impl Workbook {
             styles: StyleTable::default(),
             theme: Theme::default(),
             date_system: DateSystem::D1900,
+            date_order: DateOrder::default(),
             calc: CalcSettings::default(),
             active_sheet: 0,
             props: DocProps::default(),

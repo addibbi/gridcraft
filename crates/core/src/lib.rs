@@ -9,5 +9,5 @@ pub mod parse;
 pub mod value;
 
 pub use addr::{CellRef, MAX_COLS, MAX_ROWS, RangeRef, col_to_letters, letters_to_col};
-pub use date::DateSystem;
+pub use date::{DateOrder, DateSystem};
 pub use value::{Array, CellError, Value, compare, compare_numbers, compare_text, number_to_text, sort_compare};
