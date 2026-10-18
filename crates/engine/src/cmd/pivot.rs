@@ -528,12 +528,25 @@ fn remove_from_area(cmd: &str, pt: &mut PivotTable, field: &str, area: &str) -> 
 
 /// Applies `f` to the targeted pivot and re-renders it, as one undo step.
 fn update(s: &mut Session, p: &Json, f: impl FnOnce(&mut PivotTable, &pv::Source, &Workbook) -> Result<Json>) -> Result<Json> {
+    update_with_source(s, p, None, f)
+}
+
+/// A replacement source is validated instead of the old source, so Change Data Source can
+/// repair a PivotTable whose previous source is no longer valid.
+fn update_with_source(
+    s: &mut Session,
+    p: &Json,
+    source: Option<&str>,
+    f: impl FnOnce(&mut PivotTable, &pv::Source, &Workbook) -> Result<Json>,
+) -> Result<Json> {
     let (si, pi) = find_pivot(s, p)?;
     let replace = bool_param(p, "replace").unwrap_or(false);
     edit(s, |cx| {
-        let pt = cx.wb.sheet(si).and_then(|sh| sh.pivots.get(pi)).cloned().ok_or_else(|| other("There's no such PivotTable."))?;
-        let src = pv::read_source(&cx.wb, &pt.source, si).map_err(other)?;
-        let mut new = pt.clone();
+        let mut new = cx.wb.sheet(si).and_then(|sh| sh.pivots.get(pi)).cloned().ok_or_else(|| other("There's no such PivotTable."))?;
+        if let Some(source) = source {
+            new.source = source.to_string();
+        }
+        let src = pv::read_source(&cx.wb, &new.source, si).map_err(other)?;
         let mut out = f(&mut new, &src, &cx.wb)?;
         if let Some(slot) = cx.sheet_mut(si)?.pivots.get_mut(pi) {
             *slot = new;
@@ -1326,10 +1339,7 @@ fn change_source(s: &mut Session, p: &Json) -> Result<Json> {
         return Err(bad(C, "missing `source`"));
     }
     let source = source_param(s, p)?;
-    let (si, _) = find_pivot(s, p)?;
-    let src = pv::read_source(&s.doc()?.wb, &source, si).map_err(other)?;
-    update(s, p, move |pt, _, _| {
-        pt.source = source.clone();
+    update_with_source(s, p, Some(&source), |pt, src, _| {
         let mut dropped: Vec<String> = vec![];
         let keep = |name: &str, dropped: &mut Vec<String>| {
             let ok = src.col(name).is_some();
