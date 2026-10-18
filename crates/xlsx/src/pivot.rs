@@ -864,12 +864,10 @@ fn table_xml(pt: &PivotTable, idx: usize, cache_id: u32, c: &Cache, fmt_id: &dyn
     if !pt.show_headers {
         s.push_str(" showHeaders=\"0\"");
     }
-    // `rowGrandTotals` is the grand total row below the report (Excel's "On for Columns"),
-    // `colGrandTotals` the grand total column at its right ("On for Rows").
-    if !pt.grand_totals_cols {
+    if !pt.grand_totals_rows {
         s.push_str(" rowGrandTotals=\"0\"");
     }
-    if !pt.grand_totals_rows {
+    if !pt.grand_totals_cols {
         s.push_str(" colGrandTotals=\"0\"");
     }
     s.push_str(" multipleFieldFilters=\"0\"");
@@ -1439,8 +1437,8 @@ fn read_table(cx: &mut Ctx<'_>, x: &El, cache: &CacheIn, id: u32) -> Option<Pivo
             .map_or_else(|| field_subtotals(f), |v| v == "1" || v.eq_ignore_ascii_case("true"));
         pt.subtotals_top = f.flag("subtotalTop", true);
     }
-    pt.grand_totals_rows = x.flag("colGrandTotals", true);
-    pt.grand_totals_cols = x.flag("rowGrandTotals", true);
+    pt.grand_totals_rows = x.flag("rowGrandTotals", true);
+    pt.grand_totals_cols = x.flag("colGrandTotals", true);
     pt.show_headers = x.flag("showHeaders", true);
     pt.style = x.child("pivotTableStyleInfo").and_then(|s| s.attr("name")).unwrap_or("").to_string();
     let caption = |a: &str| x.attr(a).filter(|c| !c.is_empty()).map(str::to_string);

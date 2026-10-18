@@ -339,7 +339,7 @@ The inventory carried over from the 2026-10-07 ROADMAP.md, updated for what land
 | 2026-10-11 | minor | Password-encrypted workbooks open (#11): Essentials file-opening work 24–36 h |
 | 2026-10-11 | minor | Worksheet functions 505 / 523 (96.6%; 496 working): ODDFPRICE, ODDFYIELD, ODDLPRICE, ODDLYIELD |
 | 2026-10-11 | minor | Worksheet functions 503 / 523 (96.2%; 494 working): PERCENTOF, EUROCONVERT |
-| 2026-10-13 | minor | PivotTables: sort by a value field (`pivot.sort by:`), row/column/data/grand-total/empty-cell captions, field and item custom names, manual item order, per-field subtotals and number formats, Repeat Item Labels, Values row, classic layout; `rowGrandTotals`/`colGrandTotals` read the right way round. Refreshing 26 PivotTables from 11 real workbooks: 7,229 → 3,323 cell differences against Excel's saved output, the rest filters (#498) and Excel's order among tied values |
+| 2026-10-13 | minor | PivotTables: sort by a value field (`pivot.sort by:`), row/column/data/grand-total/empty-cell captions, field and item custom names, manual item order, per-field subtotals and number formats, Repeat Item Labels, Values row, classic layout. Refreshing 26 PivotTables from 11 real workbooks: 7,271 → 3,446 cell differences against Excel's saved output, the rest filters (#498) and Excel's order among tied values |
 | 2026-10-11 | minor | Worksheet functions 502 / 523 (96.0%; 493 working): BAHTTEXT |
 | 2026-10-11 | minor | Worksheet functions 502 / 523 (96.0%; 493 working): TRIMRANGE |
 | 2026-10-11 | minor | View › Formula Bar and Zoom 100% are engine commands (CLI/MCP); catalog 258 → 260 / 290 (#289) |
