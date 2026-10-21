@@ -1,6 +1,6 @@
 # Repairing an invalid PivotTable source
 
-> **Last updated:** 2026-10-18
+> **Last updated:** 2026-10-21
 
 An existing PivotTable can outlive its source's validity: an unused column header may be
 deleted, or its defined source name may disappear. Refresh must reject that invalid source,
@@ -61,6 +61,11 @@ Five tests generate their workbooks in Rust and cover four imported reports with
 unused headers, a deleted defined source name, invalid replacement rejection without changing
 the workbook or history, protection and occupied report cells, undo/redo, and repeated XLSX
 save/open/refresh. This repair is independent of date parsing and GETPIVOTDATA support.
+
+The branch integrates the official `v0.9.0` tag without changing the repair contract.
+It also uses a zero-sized non-Linux desktop-theme handle instead of `()`, allowing
+strict Clippy to check the shared watcher on macOS. The Linux portal connection and
+theme behavior are unchanged.
 
 The command helpers document the source-validation order and atomic edit contract.
 Rustdoc on the generator and regression helpers explains how the fictional workbook is
