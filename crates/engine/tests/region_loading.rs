@@ -77,6 +77,23 @@ fn opening_recalculates_cached_dates_in_mdy_dmy_and_ymd_for_both_date_systems() 
 }
 
 #[test]
+/// Preserve v0.9.0's explicit CSV text import while applying the session's formula region.
+fn csv_text_import_preserves_identifiers_and_uses_the_selected_formula_region() {
+    let csv = gridcraft_engine::io::base64_encode(b"00123,13/01/2026\n");
+    for as_text in [false, true] {
+        let mut s = Session::new();
+        s.prefs.region = "it-IT".into();
+        s.execute("file.open", json!({"name": "regional-dates.csv", "base64": csv, "csvAsText": as_text})).unwrap();
+        assert_eq!(s.doc().unwrap().wb.region.tag, "it-IT");
+        assert!(!s.doc().unwrap().is_dirty(), "opening is not an edit");
+        assert_eq!(value(&s, "A1"), if as_text { Value::text("00123") } else { Value::Number(123.0) });
+        assert_eq!(value(&s, "B1"), Value::text("13/01/2026"));
+        s.execute("cell.set", json!({"cell": "C1", "input": "=MONTH(DATEVALUE(B1))"})).unwrap();
+        assert_eq!(value(&s, "C1"), Value::Number(1.0));
+    }
+}
+
+#[test]
 /// Treat the region as an application preference rather than an imported XLSX property.
 fn xlsx_does_not_replace_the_applications_region() {
     let mut source = Session::new();
