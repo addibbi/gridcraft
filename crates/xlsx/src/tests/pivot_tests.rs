@@ -794,7 +794,7 @@ fn two_value_fields_without_columns_hide_the_values_row() {
     });
     let t = &two["xl/pivotTables/pivotTable1.xml"];
     assert!(t.contains("firstHeaderRow=\"0\" firstDataRow=\"1\""), "{t}");
-    assert!(t.contains("<x14:pivotTableDefinition hideValuesRow=\"1\"/>"), "{t}");
+    assert!(!t.contains("hideValuesRow"), "{t}");
     let one = small_pivot(&cols, |p| {
         p.rows = vec![field("Region")];
         p.values = vec![value("Sales")];
