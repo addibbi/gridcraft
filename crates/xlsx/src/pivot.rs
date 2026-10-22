@@ -908,8 +908,9 @@ fn table_xml(pt: &PivotTable, idx: usize, cache_id: u32, c: &Cache, fmt_id: &dyn
     } else {
         row_levels.max(1)
     };
-    // Two or more value fields in Columns alone: Excel 365 would add a `Values` caption row.
-    let hide_values_row = col_values.is_some() && col_idx.is_empty();
+    // Two or more value fields in Columns alone: Excel 365 would add a `Values` caption row
+    // when field headers are shown.
+    let hide_values_row = col_values.is_some() && col_idx.is_empty() && pt.show_headers;
     let first_header_row = usize::from(!hide_values_row);
     let _ = write!(
         s,
