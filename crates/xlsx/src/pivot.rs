@@ -1128,9 +1128,9 @@ fn table_xml(pt: &PivotTable, idx: usize, cache_id: u32, c: &Cache, fmt_id: &dyn
     }
     s.push_str(" showRowHeaders=\"1\" showColHeaders=\"1\" showRowStripes=\"0\" showColStripes=\"0\" showLastColumn=\"1\"/>");
     let overridden = pt.rows.iter().chain(&pt.columns).any(|f| f.subtotal.is_some_and(|own| own != pt.subtotals));
-    if !pt.show_values_row || hide_values_row || overridden {
+    if !pt.show_values_row || overridden {
         s.push_str("<extLst>");
-        if !pt.show_values_row || hide_values_row {
+        if !pt.show_values_row {
             let _ = write!(s, "<ext uri=\"{EXT_X14_TABLE}\" xmlns:x14=\"{NS_X14}\"><x14:pivotTableDefinition hideValuesRow=\"1\"/></ext>");
         }
         if overridden {

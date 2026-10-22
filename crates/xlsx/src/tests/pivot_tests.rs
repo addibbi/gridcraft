@@ -802,4 +802,14 @@ fn two_value_fields_without_columns_hide_the_values_row() {
     let t = &one["xl/pivotTables/pivotTable1.xml"];
     assert!(t.contains("firstHeaderRow=\"1\""), "{t}");
     assert!(!t.contains("hideValuesRow"), "{t}");
+
+    let mut wb = workbook();
+    let p = &mut wb.sheet_mut(1).unwrap().pivots[2];
+    p.filters.clear();
+    p.layout = PivotLayout::Outline;
+    p.show_headers = true;
+    p.show_values_row = true;
+    p.values.push(value("Sales"));
+    let (back, _) = read_xlsx(&write_xlsx(&wb).unwrap()).unwrap();
+    assert!(back.sheet(1).unwrap().pivots[2].show_values_row);
 }
