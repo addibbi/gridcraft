@@ -743,6 +743,15 @@ fn location_without_field_headers_has_no_values_row() {
     let parts = unzip(&write_xlsx(&wb).unwrap());
     let t3 = String::from_utf8(parts.get("xl/pivotTables/pivotTable3.xml").unwrap().clone()).unwrap();
     assert!(t3.contains("firstHeaderRow=\"1\" firstDataRow=\"2\""), "{t3}");
+    {
+        let p = &mut wb.sheet_mut(1).unwrap().pivots[2];
+        p.values.push(PivotValue { source_col: "Sales".into(), name: "Sum of Sales".into(), ..PivotValue::default() });
+        p.show_values_row = false;
+    }
+    let parts = unzip(&write_xlsx(&wb).unwrap());
+    let t3 = String::from_utf8(parts.get("xl/pivotTables/pivotTable3.xml").unwrap().clone()).unwrap();
+    assert!(t3.contains("firstHeaderRow=\"0\""), "{t3}");
+    assert!(t3.contains("<x14:pivotTableDefinition hideValuesRow=\"1\"/>"), "{t3}");
 }
 
 /// A one-sheet-of-data workbook with a pivot on "Report": `columns` are the source columns
