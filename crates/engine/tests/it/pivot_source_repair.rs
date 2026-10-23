@@ -154,6 +154,30 @@ fn invalid_sources_still_refuse_creation_refresh_and_replacement() {
     assert_eq!(pivot_source(&s, "Repair1"), OLD_SOURCE);
 }
 
+/// Reject blank replacements instead of silently repairing from the active selection.
+#[test]
+fn blank_replacements_preserve_invalid_source_and_history() {
+    let mut s = broken_reports(1);
+    s.execute("cell.set", json!({"cell": "Z20", "input": "temporary edit"})).unwrap();
+    s.execute("edit.undo", json!({})).unwrap();
+    s.execute("selection.set", json!({"range": "A1:C3"})).unwrap();
+    assert!(!s.doc().unwrap().redo.is_empty(), "rejected replacements must preserve an existing redo branch");
+    rejects_without_edit(&mut s, "pivot.changeSource", json!({"pivot": "Repair1"}), "missing `source`");
+    for field in ["source", "range"] {
+        for blank in ["", " ", "\t\r\n", "\u{2003}"] {
+            let mut params = json!({"pivot": "Repair1"});
+            params[field] = json!(blank);
+            rejects_without_edit(&mut s, "pivot.changeSource", params, "missing `source`");
+            assert_eq!(pivot_source(&s, "Repair1"), OLD_SOURCE);
+            assert_report(&s, "G6");
+        }
+    }
+    // A nonblank explicit range still repairs the pivot, with surrounding whitespace allowed.
+    s.execute("pivot.changeSource", json!({"pivot": "Repair1", "range": format!(" {REPAIRED_SOURCE} ")})).unwrap();
+    assert_eq!(pivot_source(&s, "Repair1"), REPAIRED_SOURCE);
+    assert_report(&s, "G6");
+}
+
 /// Reject source repair on a protected sheet or when report expansion would overwrite data.
 #[test]
 fn repairing_a_source_preserves_protection_and_existing_target_data() {

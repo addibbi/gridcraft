@@ -1,6 +1,6 @@
 # Roadmap detail
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-24 · **Change:** minor (retain PivotTable source repair and its regressions on current main; tests run through cargo xtask test) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-24 · **Change:** minor (reject blank PivotTable source replacements and preserve source and history; tests run through cargo xtask test) · **Target:** Microsoft Excel (Microsoft 365)
 
 Forward-looking plan. The one-page summary is [`ROADMAP.md`](../ROADMAP.md); the ranked work
 list is [`gaps.md`](gaps.md); numbers and method are in
@@ -12,6 +12,8 @@ PivotTable source repair: **Change Data Source** can replace a source that has b
 invalid (for example, an unused column's header was deleted, or a defined name disappeared).
 The replacement is validated and refreshed as one undoable edit; invalid headers, protected
 sheets and occupied report cells still refuse the operation without partial changes.
+Missing, empty or whitespace-only replacements are rejected before selection-based defaults
+can apply, preserving the original source and undo/redo history.
 Generated XLSX regression tests cover four imported pivots, undo/redo and save/open/refresh.
 A [Rust-generated minimal example](pivot-source-repair.md) reproduces the invalid old source
 with fictional data and documents the explicit repair through the engine command and CLI.
@@ -121,6 +123,7 @@ to check our files, and Windows machines with the reported GPU drivers.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-24 | minor | Reject blank PivotTable source replacements and cover source and undo/redo preservation with a valid active selection |
 | 2026-10-24 | minor | Align PivotTable source repair with current main and the consolidated engine integration-test binary |
 | 2026-10-23 | minor | Measuring: tests run through `cargo xtask test` |
 | 2026-10-18 | minor | Change Data Source validates the replacement instead of requiring a valid old source, enabling repair of imported pivots while preserving validation, protection, rollback and undo/redo |

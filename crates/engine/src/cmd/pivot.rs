@@ -1440,7 +1440,7 @@ fn refresh_all(s: &mut Session, p: &Json) -> Result<Json> {
 /// and returns the source, dropped field names, and refreshed range. The edit is atomic.
 fn change_source(s: &mut Session, p: &Json) -> Result<Json> {
     const C: &str = "pivot.changeSource";
-    if str_param(p, "source").or_else(|| str_param(p, "range")).is_none() {
+    if str_param(p, "source").or_else(|| str_param(p, "range")).is_none_or(|t| t.trim().is_empty()) {
         return Err(bad(C, "missing `source`"));
     }
     let source = source_param(s, p)?;

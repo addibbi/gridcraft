@@ -48,6 +48,9 @@ cargo run -p gridcraft-cli -- run --in /tmp/pivot-source-repair.xlsx \
 Expect `dropped: []`, one refreshed pivot and no refresh errors. Before the fix,
 `pivot.changeSource` fails with the same invalid-field-name error despite the valid replacement.
 The original invalid source is never silently trimmed or given an invented header.
+The replacement must be explicit: a missing, empty or whitespace-only `source` (or its
+`range` alias) is rejected without changing the workbook, source or undo/redo history.
+Change Data Source never falls back to the active selection for a blank replacement.
 Open `/tmp/pivot-source-repaired.xlsx` in the native app to inspect the result. This
 reproduction uses the existing engine command through the CLI and requires no native dialog.
 
@@ -57,12 +60,13 @@ reproduction uses the existing engine command through the CLI and requires no na
 cargo test -p gridcraft-engine --test it pivot_source_repair
 ```
 
-Five tests generate their workbooks in Rust and cover four imported reports with blank
+Six tests generate their workbooks in Rust and cover four imported reports with blank
 unused headers, a deleted defined source name, invalid replacement rejection without changing
-the workbook or history, protection and occupied report cells, undo/redo, and repeated XLSX
-save/open/refresh. This repair is independent of date parsing and GETPIVOTDATA support.
+the workbook or history, blank replacement rejection for both parameter names with a valid
+active selection and an existing redo branch, protection and occupied report cells, undo/redo,
+and repeated XLSX save/open/refresh. This repair is independent of date parsing and GETPIVOTDATA support.
 
-The branch is aligned with upstream `main` at `b8771d51`. The five regressions now
+The branch is aligned with upstream `main` at `b8771d51`. The six regressions
 run in the consolidated engine integration-test binary, without changing the repair
 contract. The desktop-theme compatibility fix is already supplied by upstream.
 
@@ -74,5 +78,6 @@ constructed, which failures must preserve history, and what each regression veri
 
 | Date | Change |
 |---|---|
+| 2026-10-24 | Reject blank source replacements without falling back to the active selection; add source and history regression coverage |
 | 2026-10-24 | Align with current main and the consolidated engine integration-test binary |
 | 2026-10-21 | Document the fictional reproduction, repair contract and regression coverage |
