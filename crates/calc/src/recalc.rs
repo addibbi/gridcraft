@@ -487,6 +487,20 @@ fn spill_blocked(host: &PassHost<'_>, (sheet, anchor): Key, a: &Array) -> bool {
         || sh.spill.range(range.start..=range.end).any(|(c, _)| range.contains(*c) && spilled_over(*c))
 }
 
+/// Whether `arr`, anchored at `anchor`, would spill exactly what the sheet already holds over
+/// `range`: the same area, nothing new in the way, and the same values.
+fn spills_as_before(sheet: &gridcraft_model::Sheet, anchor: CellRef, range: RangeRef, arr: &Array) -> bool {
+    let end =
+        CellRef::new(anchor.row.saturating_add((arr.rows as u32).saturating_sub(1)), anchor.col.saturating_add((arr.cols as u32).saturating_sub(1)));
+    RangeRef::new(anchor, end) == range
+        && !sheet.merges.iter().any(|m| m.intersects(&range))
+        && !sheet.tables.iter().any(|t| t.range.contains(anchor))
+        && range
+            .iter()
+            .enumerate()
+            .all(|(i, c)| c == anchor || (!sheet.cells.has(c) && sheet.spill.get(&c) == Some(arr.data.get(i).unwrap_or(&Value::Empty))))
+}
+
 impl PassHost<'_> {
     /// Calculates `k` (and the formulas it reads) with bounded stack: when [`Self::compute`] would
     /// go deeper than [`MAX_NESTED`], it suspends what is in progress, the formula it needed is
@@ -614,9 +628,11 @@ impl PassHost<'_> {
                     let data = a.data.iter().map(|x| if matches!(x, Value::Empty) { Value::Number(0.0) } else { x.clone() }).collect();
                     Array::new(a.rows, a.cols, data).map(std::sync::Arc::new).unwrap_or(a)
                 };
-                if a.rows > 1 || a.cols > 1 {
-                    self.spills.insert(k, a.clone());
-                }
+                // A dynamic-array formula anchors a spill range even while its result is one
+                // value -- a FILTER matching one row, a SORT or UNIQUE over one item -- so `C1#`
+                // is the 1 x 1 range and `ROWS(C1#)` is 1, as in Excel (#1491). A formula that
+                // returns a scalar never reaches this arm, so it does not become an anchor.
+                self.spills.insert(k, a.clone());
                 a.data.first().cloned().unwrap_or_default()
             }
             Value::Empty => Value::Number(0.0),
@@ -1059,6 +1075,7 @@ impl Calc {
     /// Evaluates the dirty set and writes results (and spills) back.
     fn run(&mut self, wb: &mut Workbook, mut dirty: Vec<Key>, full: bool) {
         let mut dynamic_again = !self.graph.dynamic.is_empty();
+        self.last_recalc_cells = 0;
         for _round in 0..8 {
             if dirty.is_empty() {
                 break;
@@ -1093,7 +1110,7 @@ impl Calc {
                 eprintln!("  eval {} formulas {:.1} ms", results.len(), prof_now() - tp);
             }
             let tw = prof_now();
-            self.last_recalc_cells = results.len();
+            self.last_recalc_cells += results.len();
             self.circular = cycles;
             // Write back.
             let mut spill_changes: Vec<Key> = Vec::new();
@@ -1111,6 +1128,14 @@ impl Calc {
                 let Some(sheet) = wb.sheet_mut(k.0) else { continue };
                 let old = sheet.spill_ranges.get(&k.1).copied();
                 if old.is_none() && new.is_none() {
+                    continue;
+                }
+                // An array that spills exactly as before changes nothing its dependents read, so
+                // they aren't queued again. Otherwise two arrays that read each other's spill areas
+                // queue each other in every round, up to the round limit.
+                if let (Some(r), Some(arr)) = (old, new)
+                    && spills_as_before(sheet, k.1, r, arr)
+                {
                     continue;
                 }
                 if let Some(r) = old {
@@ -1132,6 +1157,13 @@ impl Calc {
                         if let Some(cell) = sheet.cells.get_mut(k.1) {
                             cell.value = Value::Error(CellError::Spill);
                         }
+                        // Not blocked while the pass ran (it would have been #SPILL! there), so
+                        // blocked by another array of this pass: the formulas that read this one,
+                        // at its anchor or over the area it would have spilled into, read #SPILL!
+                        // or empty cells now.
+                        let mut deps = Vec::new();
+                        self.graph.dependents_of_range(k.0, range, &mut deps);
+                        spill_changes.extend(deps.into_iter().filter(|d| d != k));
                     } else {
                         for (i, c) in range.iter().enumerate() {
                             if c != k.1 {
@@ -1145,7 +1177,15 @@ impl Calc {
                 if let Some(r) = changed_range {
                     let mut deps = Vec::new();
                     self.graph.dependents_of_range(k.0, r, &mut deps);
-                    spill_changes.extend(deps.into_iter().filter(|d| d != k));
+                    // Not the anchor itself (that would read its own array), unless its old array
+                    // is gone or partly freed: its new formula may have read the old values, still
+                    // laid out while it was evaluated.
+                    let freed = match (old, sheet.spill_ranges.get(&k.1)) {
+                        (Some(o), Some(n)) => !(n.contains(o.start) && n.contains(o.end)),
+                        (_, None) => true,
+                        (None, Some(_)) => false,
+                    };
+                    spill_changes.extend(deps.into_iter().filter(|d| d != k || freed));
                 }
                 if let Some(o) = old
                     && !sheet.spill_ranges.get(&k.1).is_some_and(|n| n.contains(o.start) && n.contains(o.end))

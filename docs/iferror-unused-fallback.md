@@ -1,11 +1,11 @@
 # Unused IFERROR fallbacks during suspended recalculation
 
-> **Last updated:** 2026-10-21
+> **Last updated:** 2026-10-24
 
-This is a follow-up to PR #1340's bounded-stack recalculation, tested with its
-`13e730d42a54eea14f4b53dc9c8294c004a96ef5` head integrated with v0.9.0. It depends
-on that scheduler and preserves its batched dependencies, waiting guards and
-deduplication. It is not a replacement for the parent PR.
+This is a follow-up to PR #1340's bounded-stack recalculation, now merged upstream.
+The branch is aligned with `main` at `b8771d51`; it preserves the parent's batched
+dependencies, waiting guards and deduplication. The remaining change is the range
+batching guard and the generated regression coverage described below.
 
 At the nesting limit, a formula read temporarily returns `#CALC!` while recalculation
 unwinds to evaluate a pending dependency. An enclosing IFERROR can then read its
@@ -48,4 +48,5 @@ are generated in Rust; no private workbook or Excel-produced fixture is included
 
 | Date | Change |
 |---|---|
+| 2026-10-24 | Align with main after #1340 merged, preserving the parent scheduler and its 3,000-cell regression |
 | 2026-10-21 | Guard range dependency batching against unused IFERROR fallback reads; cover real cycles and recovery |
