@@ -2,8 +2,8 @@
 //!
 //! Usage: `gridcraft [--control <port>] [--sample <name>] [--region <tag>] [files…]`
 //!
-//! `--region <tag>` (or `--region=<tag>`) overrides the saved region for DATEVALUE and
-//! TIMEVALUE before the first workbook recalculation. The default is en-US; this choice
+//! `--region <tag>` (or `--region=<tag>`) overrides the saved region for date/time
+//! formula arguments before the first workbook recalculation. The default is en-US; this choice
 //! is independent of interface language and does not change canonical command input.
 //!
 //! `--control <port>` (or `GRIDCRAFT_CONTROL_PORT`) starts a localhost JSON-lines control
@@ -115,7 +115,7 @@ fn load_prefs(app: &mut SheetApp) {
     {
         let saved = serde_json::from_slice(&b).ok().and_then(|v| gridcraft_ui_egui::i18n::saved_language(&v));
         let language = saved.unwrap_or(app.ui.language);
-        app.ui = ui;
+        app.ui = ui.at_startup();
         app.ui.language = language;
     }
     if let Ok(b) = std::fs::read(dir.join("prefs.json"))
