@@ -11,7 +11,7 @@
 //! layout flags, grand totals and style become a model [`PivotTable`]. Anything we don't model
 //! (OLAP sources, calculated fields, numeric grouping…) becomes a warning.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 
 use gridcraft_core::date::{datetime_from_serial, iso_ymd, serial_from_iso_ymd};
@@ -1519,7 +1519,17 @@ fn read_table(cx: &mut Ctx<'_>, x: &El, cache: &CacheIn, id: u32) -> Option<Pivo
                 let xs: Vec<u32> = items.iter().filter_map(|it| it.attr_u32("x")).collect();
                 let reordered = xs.windows(2).any(|w| w[0] > w[1]);
                 if f.sort == PivotSort::None && (group == PivotDateGroup::None || reordered) {
-                    f.item_order = items.iter().filter_map(|it| lab(it)).collect();
+                    let mut seen = HashSet::new();
+                    f.item_order = items
+                        .iter()
+                        .filter_map(|it| {
+                            let index = it.attr_u32("x")? as usize;
+                            let label = labels.get(index)?;
+                            // Keep the first valid reference before cloning its label, so
+                            // duplicate references cannot multiply retained order storage.
+                            seen.insert(index).then(|| label.clone())
+                        })
+                        .collect();
                 }
                 if items.iter().any(|it| it.flag("h", false)) {
                     let shown: Vec<String> = items.iter().filter(|it| !it.flag("h", false)).filter_map(|it| lab(it)).collect();
