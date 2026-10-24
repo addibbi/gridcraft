@@ -3,7 +3,7 @@
 > **Last updated:** 2026-10-24
 
 This is a follow-up to PR #1340's bounded-stack recalculation, now merged upstream.
-The branch is aligned with `main` at `b8771d51`; it preserves the parent's batched
+The branch is aligned with `main` at `3099df9`; it preserves the parent's batched
 dependencies, waiting guards and deduplication. The remaining change is the range
 batching guard and the generated regression coverage described below.
 
@@ -48,5 +48,5 @@ are generated in Rust; no private workbook or Excel-produced fixture is included
 
 | Date | Change |
 |---|---|
-| 2026-10-24 | Align with main after #1340 merged, preserving the parent scheduler and its 3,000-cell regression |
+| 2026-10-24 | Align with main at `3099df9` after #1340 merged, preserving the parent scheduler, its 3,000-cell regression and subsequent upstream hardening |
 | 2026-10-21 | Guard range dependency batching against unused IFERROR fallback reads; cover real cycles and recovery |
