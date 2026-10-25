@@ -1,6 +1,6 @@
 # Gaps
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-23 · **Change:** minor (§8: refreshed file pivots keep their sort, captions and layout settings; PivotTable Show Details) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-25 · **Change:** minor (§8: refreshed file pivots keep sort, captions and layout settings alongside PivotTable Enable show details; earlier: PivotTable Show Details) · **Target:** Microsoft Excel (Microsoft 365)
 
 Every known shortfall against Excel, one entry each, ranked by user impact (what blocks someone
 using GridCraft for real work first). This is the work list: pick from the top, check the open
@@ -84,8 +84,11 @@ No alpha blockers: every core workflow passes the [alpha gate](roadmap.md#alpha-
 ### 8. PivotTables: no slicers, calculated items, PivotCharts; unverified in Excel (F)
 - **Evidence:** `parity-checklist.md` missing `insert.slicer`, `insert.timeline`,
   `insert.pivotChart`, `table.insertSlicer`; calculated items and GETPIVOTDATA missing (calculated fields
-  and values on rows done). Refreshing a file's pivot keeps its sort-by-value, captions, item order and layout settings; Excel's order among items with equal sort values is not reproduced. Show Details (double-click a value, subtotal or grand total cell) lists
-  its source records on a new sheet; the "Enable show details" option isn't modelled yet.
+  and values on rows done). Refreshing a file's pivot keeps its sort-by-value, captions, item order
+  and layout settings; Excel's order among items with equal sort values is not reproduced. Show Details (double-click a value, subtotal or grand total cell) lists
+  its source records on a new sheet. The "Enable show details" option (`pivot.options`
+  `enableShowDetails`, saved as `enableDrill`) turns it off; it has no PivotTable Options dialog
+  yet (command only).
 - **Impact:** pivots are the analyst's main tool.
 - **Estimate:** 20–30 h for beta (25–40 h full).
 
@@ -179,6 +182,8 @@ No alpha blockers: every core workflow passes the [alpha gate](roadmap.md#alpha-
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-25 | trivial | Align the #722-based manual-order follow-up with main; preserve both refreshed pivot settings and the Enable show details option |
+| 2026-10-24 | minor | §8: PivotTable Enable show details: `pivot.options` `enableShowDetails` turns Show Details off for a PivotTable, read and written in XLSX as `enableDrill` |
 | 2026-10-23 | minor | §8: PivotTable Show Details: double-clicking a value cell lists its source records on a new sheet (#2364) |
 | 2026-10-20 | minor | §11: the Japanese catalog covers the dialogs, messages and menus — 943 keys (~43%), matching the pt-BR coverage; a test keeps the two catalogs in step |
 | 2026-10-17 | minor | §6: the five reports it tracked are closed and their PRs merged (#57, #133, #139, #140, #134; PRs #148, #155, #156, #157); the entry stays open for §15's oracle suite |
@@ -200,7 +205,6 @@ No alpha blockers: every core workflow passes the [alpha gate](roadmap.md#alpha-
 | 2026-10-11 | minor | §3: XLSX pass-through keeps custom XML, external links, connections, query tables, printer settings, controls and OLE objects (#330, #324) |
 | 2026-10-11 | minor | §13: Forecast Sheet landed (#322) |
 | 2026-10-11 | minor | §15: ODDFPRICE, ODDFYIELD, ODDLPRICE, ODDLYIELD added (18 functions missing) |
-| 2026-10-13 | minor | §8: refresh fidelity for file pivots (sort by value, captions, item order, layout settings) |
 | 2026-10-11 | minor | §15: PERCENTOF and EUROCONVERT added (20 functions missing) |
 | 2026-10-11 | minor | §15: BAHTTEXT added (21 functions missing) |
 | 2026-10-11 | minor | §15: TRIMRANGE added (21 functions missing; trim-reference operators still missing) |

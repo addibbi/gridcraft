@@ -192,9 +192,18 @@ pub fn specs() -> Vec<CommandSpec> {
             "Show Details",
             [],
             None,
-            "{cell?: \"B5\" (a value, subtotal or grand total cell of a PivotTable on the active sheet; default: the active cell)} puts the source records behind that value on a new sheet before the current one → {sheet, records}",
+            "{cell?: \"B5\" (a value, subtotal or grand total cell of a PivotTable on the active sheet; default: the active cell)} puts the source records behind that value on a new sheet before the current one → {sheet, records}. An error when the PivotTable's Enable show details option is off (`pivot.options` `{enableShowDetails: true}` turns it on).",
             has_doc,
             show_details
+        ),
+        cmd!(
+            "pivot.options",
+            "PivotTable Options",
+            ["PivotTable Analyze", "PivotTable"],
+            None,
+            "{pivot?, enableShowDetails?: bool (Data › Enable show details: off, Show Details and double-clicking a value cell list no records)} → {enableShowDetails}",
+            has_doc,
+            options
         ),
         cmd!(
             "pivot.delete",
@@ -763,8 +772,13 @@ fn show_details(s: &mut Session, p: &Json) -> Result<Json> {
         .find(|pt| pt.last_range.is_some_and(|r| r.contains(at)))
         .ok_or_else(|| EngineError::Disabled("pivot.showDetails".into(), pv::NOT_A_VALUE_CELL.into()))?;
     let origin = pt.last_range.map(|r| r.start).unwrap_or_default();
-    let found = pv::detail_records(&d.wb, pt, active, at.row.saturating_sub(origin.row), at.col.saturating_sub(origin.col)).map_err(other)?;
-    let (src, records) = found.ok_or_else(|| EngineError::Disabled("pivot.showDetails".into(), pv::NOT_A_VALUE_CELL.into()))?;
+    let found = pv::detail_records(&d.wb, pt, active, at.row.saturating_sub(origin.row), at.col.saturating_sub(origin.col));
+    // With the option off, a report that is out of date or a source that cannot be read is
+    // reported as the option; only a cell that is not a value cell keeps its own message.
+    if !pt.enable_show_details && !matches!(found, Ok(None)) {
+        return Err(other(SHOW_DETAILS_OFF));
+    }
+    let (src, records) = found.map_err(other)?.ok_or_else(|| EngineError::Disabled("pivot.showDetails".into(), pv::NOT_A_VALUE_CELL.into()))?;
     if d.wb.protected_structure {
         return Err(other("The workbook is protected and cannot be changed."));
     }
@@ -832,6 +846,32 @@ fn show_details(s: &mut Session, p: &Json) -> Result<Json> {
     Ok(res)
 }
 
+/// The message Show Details gives while Enable show details is off.
+const SHOW_DETAILS_OFF: &str = "Show Details is turned off for this PivotTable.";
+
+/// PivotTable Options: Enable show details (Data). Changes only the option; the report is not
+/// refreshed. Without params it returns the current setting.
+fn options(s: &mut Session, p: &Json) -> Result<Json> {
+    let (si, pi) = find_pivot(s, p)?;
+    let enable = bool_param(p, "enableShowDetails");
+    if p.get("enableShowDetails").is_some_and(|v| !v.is_null()) && enable.is_none() {
+        return Err(bad("pivot.options", "`enableShowDetails` must be true or false"));
+    }
+    let current = |s: &Session| -> Result<Json> {
+        let pt = s.doc()?.wb.sheet(si).and_then(|sh| sh.pivots.get(pi)).ok_or_else(|| other("There's no such PivotTable."))?;
+        Ok(json!({"enableShowDetails": pt.enable_show_details}))
+    };
+    let Some(on) = enable else { return current(s) };
+    if current(s)?["enableShowDetails"] == json!(on) {
+        return current(s);
+    }
+    edit(s, |cx| {
+        let pt = cx.sheet_mut(si)?.pivots.get_mut(pi).ok_or_else(|| other("There's no such PivotTable."))?;
+        pt.enable_show_details = on;
+        Ok(json!({"enableShowDetails": on}))
+    })
+}
+
 fn summarize_table(s: &mut Session, p: &Json) -> Result<Json> {
     let d = s.doc()?;
     let name = match str_param(p, "table") {
@@ -881,6 +921,7 @@ fn pivot_json(wb: &Workbook, si: usize, pt: &PivotTable) -> Json {
         "calculatedFields": pt.calculated_fields.iter().map(|c| json!({"name": c.name, "formula": c.formula})).collect::<Vec<_>>(),
         "valuesOnRows": pt.values_on_rows,
         "valuesPosition": pt.values_position,
+        "enableShowDetails": pt.enable_show_details,
     })
 }
 
@@ -2264,6 +2305,41 @@ mod tests {
     }
 
     #[test]
+    fn manual_order_source_reset_keeps_show_details_records() {
+        let mut s = sales();
+        s.execute("insert.pivotTable", json!({"rows": ["Region"], "columns": ["Product"], "values": ["Sales"]})).unwrap();
+        edit_pt(&mut s, |p| {
+            p.rows[0].sort = PivotSort::None;
+            p.rows[0].item_order = vec!["North".into(), "East".into(), "West".into()];
+            p.columns[0].sort = PivotSort::None;
+            p.columns[0].item_order = vec!["Plums".into(), "Pears".into(), "Apples".into()];
+        });
+        let details = |s: &mut Session, expected: &[(&str, &str, &str)]| {
+            assert_eq!(s.execute("pivot.showDetails", json!({"cell": "B5"})).unwrap()["records"], expected.len());
+            let rows = sheet_rows(s);
+            let actual: Vec<_> = rows.iter().skip(1).map(|row| (row[0].as_str(), row[1].as_str(), row[4].as_str())).collect();
+            assert_eq!(actual, expected);
+            s.execute("edit.undo", json!({})).unwrap();
+            assert_eq!(s.doc().unwrap().wb.sheets.len(), 2);
+        };
+        // B5 now names North/Plums instead of the default East/Apples report cell.
+        assert_eq!(val(&s, "B5"), Value::Number(15.0));
+        details(&mut s, &[("North", "Plums", "15")]);
+        s.execute("pivot.options", json!({"enableShowDetails": false})).unwrap();
+        assert_eq!(s.execute("pivot.showDetails", json!({"cell": "B5"})).unwrap_err().to_string(), super::SHOW_DETAILS_OFF);
+        assert_eq!(s.doc().unwrap().wb.sheets.len(), 2);
+        assert_eq!(pt(&s).rows[0].item_order, ["North", "East", "West"]);
+        assert_eq!(pt(&s).columns[0].item_order, ["Plums", "Pears", "Apples"]);
+        s.execute("pivot.options", json!({"enableShowDetails": true})).unwrap();
+        s.execute("pivot.sort", json!({"field": "Region", "order": "source"})).unwrap();
+        assert_eq!(val(&s, "B5"), Value::Number(60.0));
+        details(&mut s, &[("East", "Plums", "60")]);
+        s.execute("pivot.sort", json!({"field": "Product", "order": "source"})).unwrap();
+        assert_eq!(val(&s, "B5"), Value::Number(160.0));
+        details(&mut s, &[("East", "Apples", "100"), ("East", "Apples", "60")]);
+    }
+
+    #[test]
     fn manual_order_regroup_discards_ranks_from_the_previous_grouping() {
         let mut s = Session::new();
         s.new_workbook();
@@ -2689,6 +2765,7 @@ mod tests {
             "pivot.changeSource",
             "pivot.delete",
             "pivot.showDetails",
+            "pivot.options",
         ];
         let hostile = [
             json!({}),
@@ -3208,5 +3285,73 @@ mod tests {
             assert!(s.execute("pivot.showDetails", json!({"cell": cell})).is_err(), "{cell}");
         }
         assert_eq!(s.doc().unwrap().wb.sheets.len(), 2);
+    }
+
+    #[test]
+    fn enable_show_details_off_stops_show_details() {
+        let mut s = sales();
+        s.execute("insert.pivotTable", json!({"rows": ["Region"], "columns": ["Product"], "values": ["Sales"]})).unwrap();
+        assert_eq!(s.execute("pivot.options", json!({})).unwrap()["enableShowDetails"], true);
+        s.execute("pivot.options", json!({"enableShowDetails": false})).unwrap();
+        assert!(!pt(&s).enable_show_details);
+        assert_eq!(s.execute("pivot.fields", json!({})).unwrap()["enableShowDetails"], false);
+        let e = s.execute("pivot.showDetails", json!({"cell": "B5"})).unwrap_err().to_string();
+        assert_eq!(e, "Show Details is turned off for this PivotTable.");
+        assert_eq!(s.doc().unwrap().wb.sheets.len(), 2);
+        // A label still reports that it is not a value cell.
+        let e = s.execute("pivot.showDetails", json!({"cell": "A5"})).unwrap_err().to_string();
+        assert!(!e.contains("turned off"), "{e}");
+        // Setting the same value again adds no undo step.
+        let after = s.doc().unwrap().revision;
+        s.execute("pivot.options", json!({"enableShowDetails": false})).unwrap();
+        assert_eq!(s.doc().unwrap().revision, after);
+        assert!(s.execute("pivot.options", json!({"enableShowDetails": "no"})).is_err());
+        // One undo turns the option back on.
+        s.execute("edit.undo", json!({})).unwrap();
+        assert!(pt(&s).enable_show_details);
+        assert_eq!(s.execute("pivot.showDetails", json!({"cell": "B5"})).unwrap()["records"], 2);
+    }
+
+    #[test]
+    fn enable_show_details_off_is_reported_before_an_out_of_date_report() {
+        let mut s = sales();
+        s.execute("insert.pivotTable", json!({"rows": ["Region"], "columns": ["Product"], "values": ["Sales"]})).unwrap();
+        s.execute("pivot.options", json!({"enableShowDetails": false})).unwrap();
+        // The source changes after the report was written, so the report is out of date.
+        s.execute("range.setValues", json!({"range": "Sheet1!A2", "values": [["Central"]]})).unwrap();
+        let e = s.execute("pivot.showDetails", json!({"cell": "B5"})).unwrap_err().to_string();
+        assert!(e.contains("turned off") && !e.contains("out of date"), "{e}");
+        assert_eq!(s.doc().unwrap().wb.sheets.len(), 2);
+    }
+
+    #[test]
+    fn detail_cells_are_the_cells_show_details_takes() {
+        let mut s = sales();
+        s.execute("insert.pivotTable", json!({"rows": ["Region"], "columns": ["Product"], "values": ["Sales"]})).unwrap();
+        for layout in 0..2 {
+            if layout == 1 {
+                // A two-level row axis, with subtotals at the top of each group.
+                s.execute("pivot.moveField", json!({"field": "Product", "from": "columns", "to": "rows"})).unwrap();
+            }
+            let d = s.doc().unwrap();
+            let si = d.wb.active_sheet;
+            let pt = &d.wb.active().unwrap().pivots[0];
+            let r = pt.last_range.unwrap();
+            let cells = crate::pivot::detail_cells(&d.wb, pt, si).unwrap();
+            let mut values = 0;
+            for row in 0..r.height() {
+                for col in 0..r.width() {
+                    let one = crate::pivot::detail_records(&d.wb, pt, si, row, col).unwrap();
+                    assert_eq!(cells.contains(&(row, col)), one.is_some(), "layout {layout}, cell ({row}, {col})");
+                    values += usize::from(one.is_some());
+                }
+            }
+            assert!(values > 4, "layout {layout} has value cells");
+        }
+        // An out-of-date report answers as Show Details does.
+        s.execute("range.setValues", json!({"range": "Sheet1!A2", "values": [["Central"]]})).unwrap();
+        let d = s.doc().unwrap();
+        let pt = &d.wb.active().unwrap().pivots[0];
+        assert!(crate::pivot::detail_cells(&d.wb, pt, d.wb.active_sheet).unwrap_err().contains("out of date"));
     }
 }
