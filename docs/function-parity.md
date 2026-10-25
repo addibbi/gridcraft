@@ -73,8 +73,9 @@ This improves series preparation; it does not change the model-fitting or season
 | CALL, REGISTER.ID, RTD | no | — | Native DLL/COM calls; not portable or safe |
 
 The follow-up to #1340 keeps unused IFERROR fallbacks out of suspended range dependency
-batches, while retaining true-cycle detection and wide-range batching. Generated regressions
-and scope: [iferror-unused-fallback.md](iferror-unused-fallback.md).
+batches, while retaining true-cycle detection and wide-range batching. A primary SUMPRODUCT
+control covers materialized range batching at the nesting limit before suspension. Generated
+regressions and scope: [iferror-unused-fallback.md](iferror-unused-fallback.md).
 
 ## Formula language
 
@@ -127,6 +128,7 @@ workbooks; results checked in as data, not Excel files) and fixing what it finds
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-25 | minor | Add a generated primary SUMPRODUCT regression at the nesting limit, checking calculated values and absence of circular diagnostics |
 | 2026-10-25 | minor | Align the IFERROR follow-up with main at `17b9f6f`, retaining upstream stack-budget handling and circular diagnostics alongside the range batching guard and generated regressions |
 | 2026-10-25 | minor | LAMBDA row: a LAMBDA that calls itself more than 140 times, and a formula nested past the depth limit, give `#NUM!` (#1809; nesting gave `#CALC!` before). `=Foo(1)` where the defined name Foo holds `#N/A` gives `#N/A`, not `#NAME?` |
 | 2026-10-24 | minor | Align the IFERROR follow-up with main at `3099df9` after #1340 merged, retaining the parent's wide-range batching and 3,000-cell regression along with current upstream hardening |

@@ -35,13 +35,20 @@ diagnostic. The same assertions cover `SUM(Data!D1:D2)` and
 introduce a real ancestor back-edge or a cycle between batched siblings, and remove
 those cycles to verify recovery. An acyclic used fallback still returns its value.
 
+A separate control replaces `A64` with the primary expression
+`SUMPRODUCT(Data!B1:B128)`. It starts a materialized range read at the nesting limit
+before suspension, exercising `range_values` with batching enabled. It must also
+produce A1 = 191 and D1 = 192 with no circular diagnostic. This complements the
+materialized fallback case, which starts after the primary streamed read suspends.
+
 ```sh
 cargo test -p gridcraft-calc --test unused_error_fallback
 cargo test -p gridcraft-calc --lib wide_read_at_the_nesting_limit_suspends_once
 cargo xtask ci
 ```
 
-The existing 3,000-cell suspension-count regression remains the performance guard.
+The existing 3,000-cell suspension-count regression covers both `SUM` and
+`SUMPRODUCT`, checking the result, no cycles and at most three suspensions for each.
 No elapsed-time speedup is claimed for this change. All source data and formulas
 are generated in Rust; no private workbook or Excel-produced fixture is included.
 
@@ -49,6 +56,7 @@ are generated in Rust; no private workbook or Excel-produced fixture is included
 
 | Date | Change |
 |---|---|
+| 2026-10-25 | Cover a primary materialized SUMPRODUCT range at the nesting limit, with expected values and no circular diagnostics; all seven integration cases use generated fictional workbooks, and the 3,000-cell suspension-count control covers SUM and SUMPRODUCT |
 | 2026-10-25 | Align with main at `17b9f6f`, keeping upstream stack-budget and circular-diagnostic changes alongside the unchanged range batching guard and generated regressions |
 | 2026-10-24 | Align with main at `3099df9` after #1340 merged, preserving the parent scheduler, its 3,000-cell regression and subsequent upstream hardening |
 | 2026-10-21 | Guard range dependency batching against unused IFERROR fallback reads; cover real cycles and recovery |

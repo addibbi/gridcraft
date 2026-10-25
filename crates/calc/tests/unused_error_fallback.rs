@@ -30,7 +30,7 @@ fn value(wb: &Workbook, sheet: usize, row: u32, col: u32) -> Value {
 
 fn assert_acyclic(wb: &mut Workbook, calc: &mut Calc) {
     calc.recalc_all(wb);
-    assert!(calc.circular.is_empty(), "unused fallback must not create a cycle: {:?}", calc.circular);
+    assert!(calc.circular.is_empty(), "acyclic workbook must not create a cycle: {:?}", calc.circular);
     assert_eq!(value(wb, 0, 0, 0), Value::Number(191.0));
     assert_eq!(value(wb, 1, 0, 3), Value::Number(192.0));
 }
@@ -38,6 +38,14 @@ fn assert_acyclic(wb: &mut Workbook, calc: &mut Calc) {
 #[test]
 fn unused_direct_fallback_is_acyclic() {
     assert_acyclic(&mut workbook("Data!D1"), &mut Calc::new());
+}
+
+/// A primary materialized range starts at the nesting limit before any read suspends.
+#[test]
+fn primary_materialized_range_at_nesting_limit_is_acyclic() {
+    let mut wb = workbook("0");
+    put(&mut wb, 0, 63, 0, "=SUMPRODUCT(Data!B1:B128)");
+    assert_acyclic(&mut wb, &mut Calc::new());
 }
 
 #[test]
