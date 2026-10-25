@@ -56,6 +56,7 @@ are generated in Rust; no private workbook or Excel-produced fixture is included
 
 | Date | Change |
 |---|---|
+| 2026-10-25 | Document the touched recalculation methods, synthetic fixture helpers and regression expectations without changing behavior or coverage thresholds |
 | 2026-10-25 | Cover a primary materialized SUMPRODUCT range at the nesting limit, with expected values and no circular diagnostics; all seven integration cases use generated fictional workbooks, and the 3,000-cell suspension-count control covers SUM and SUMPRODUCT |
 | 2026-10-25 | Align with main at `17b9f6f`, keeping upstream stack-budget and circular-diagnostic changes alongside the unchanged range batching guard and generated regressions |
 | 2026-10-24 | Align with main at `3099df9` after #1340 merged, preserving the parent scheduler, its 3,000-cell regression and subsequent upstream hardening |

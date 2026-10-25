@@ -552,6 +552,9 @@ impl PassHost<'_> {
         }
     }
 
+    /// Returns a cached value or evaluates `k`, recording genuine cycles and respecting stack limits.
+    /// An uncached formula read during suspension returns temporary `#CALC!` without queuing further
+    /// dependencies; `calculate` retries abandoned evaluations after pending dependencies are ready.
     fn compute(&mut self, k: Key) -> Value {
         if let Some(v) = self.results.get(&k) {
             let v = v.clone();
@@ -819,6 +822,9 @@ impl Host for PassHost<'_> {
         }
         self.wb.sheet(sheet).map(|s| s.value(c)).unwrap_or_default()
     }
+    /// Materializes row-major range values, including blanks and spills, and evaluates formula cells.
+    /// Dependency batching is eligible only if this read starts before suspension at the nesting
+    /// limit, so a fallback read during unwinding cannot add false dependencies.
     fn range_values(&mut self, sheet: usize, range: RangeRef) -> Vec<Value> {
         let batch = self.suspend.is_none() && self.depth >= MAX_NESTED;
         let (h, w) = (range.height() as usize, range.width() as usize);
@@ -892,6 +898,9 @@ impl Host for PassHost<'_> {
         }
         out
     }
+    /// Evaluates range formulas, then visits stored values until the callback stops the walk.
+    /// Returns false for a missing sheet or spills so the caller can use a materialized read.
+    /// Only reads begun before suspension at the nesting limit may batch pending dependencies.
     fn visit_range(&mut self, sheet: usize, range: RangeRef, f: &mut dyn FnMut(&Value) -> bool) -> bool {
         let batch = self.suspend.is_none() && self.depth >= MAX_NESTED;
         let wb = self.wb;
