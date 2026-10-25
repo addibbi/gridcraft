@@ -411,6 +411,7 @@ fn resolve_source(wb: &Workbook, text: &str, default_sheet: usize, depth: u32) -
     None
 }
 
+/// Writes a worksheet source with explicit sheet-limit endpoints for whole rows or columns.
 fn range_source_xml(sheet: &str, r: RangeRef) -> String {
     let name: String = sheet.chars().take(31).collect();
     // Worksheet sources use cell endpoints, including the sheet limit for a

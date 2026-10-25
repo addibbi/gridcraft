@@ -12,13 +12,16 @@ use super::minimal;
 use crate::xml;
 use crate::{read_xlsx, write_xlsx};
 
+/// Parses a known-valid A1 cell address used to construct or inspect a generated fixture.
 fn at(a: &str) -> CellRef {
     CellRef::parse(a).unwrap()
 }
+/// Parses a known-valid A1 range for fixture tables and PivotTable layout bounds.
 fn rr(a: &str) -> RangeRef {
     RangeRef::parse(a).unwrap()
 }
 
+/// Two saves preserve whole-axis extents while the cache contains only the eight source records.
 #[test]
 fn whole_axis_pivot_sources_survive_xlsx_with_bounded_cache_records() {
     for (source, reference, expected) in [
@@ -190,10 +193,12 @@ fn whole_axis_pivot_cache_padding_still_obeys_source_and_record_limits() {
     assert!(!parts.contains_key("xl/pivotCache/pivotCacheRecords1.xml"));
 }
 
+/// Converts a known-valid fixture date into the workbook's 1900-system serial value.
 fn date(y: i64, m: i64, d: i64) -> f64 {
     serial_from_ymd(gridcraft_core::DateSystem::D1900, y, m, d).unwrap()
 }
 
+/// Builds an axis field linked to the given source header, retaining default grouping and sorting.
 fn field(name: &str) -> PivotField {
     PivotField { source_col: name.into(), ..PivotField::default() }
 }
@@ -369,6 +374,7 @@ fn workbook() -> Workbook {
     wb
 }
 
+/// Extracts generated XLSX package parts so tests can inspect the written cache and table XML.
 fn unzip(bytes: &[u8]) -> HashMap<String, Vec<u8>> {
     let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
     let mut m = HashMap::new();

@@ -71,6 +71,7 @@ main provides the `NoLink` implementation; its portal timeout is retained too.
 
 | Date | Change |
 |---|---|
+| 2026-10-25 | Document whole-axis worksheet-source serialization and the generated round-trip test contracts; behavior and coverage thresholds unchanged |
 | 2026-10-25 | Preserve declared header and field origins independently of bounded record scans; count padded fields in source and snapshot limits, with sparse-source regressions |
 | 2026-10-24 | Align with current main and its consolidated engine tests; retain upstream desktop-theme fixes without a PR-specific change |
 | 2026-10-21 | Preserve declared whole-axis sources while bounding cache generation; add generated XLSX and engine regressions |

@@ -8,6 +8,8 @@ use gridcraft_engine::core::{CellRef, Value};
 use gridcraft_model::{DefinedName, Sheet};
 use serde_json::json;
 
+/// Builds a fictional two-month source and a separate report using the requested source reference.
+/// Sheet-local and workbook-scoped names let the same fixture exercise name resolution.
 fn source(source: &str) -> Session {
     let mut s = Session::new();
     s.new_workbook();
@@ -24,6 +26,7 @@ fn source(source: &str) -> Session {
     s
 }
 
+/// A saved fixed rectangle excludes appended rows and retains January 17 and the grand total 40.
 #[test]
 fn bounded_source_stays_bounded_after_xlsx_round_trip() {
     let mut s = source("Sheet1!$A$1:$B$3");
@@ -36,6 +39,7 @@ fn bounded_source_stays_bounded_after_xlsx_round_trip() {
     assert_report(&s, 17.0, 40.0);
 }
 
+/// Checks report labels and totals, including the unchanged February amount of 23.
 fn assert_report(s: &Session, january: f64, total: f64) {
     let sh = s.doc().unwrap().wb.sheet(1).unwrap();
     for (cell, expected) in [
@@ -50,6 +54,8 @@ fn assert_report(s: &Session, january: f64, total: f64) {
     }
 }
 
+/// Whole-column references and names retain their extent through two saves and refresh new rows.
+/// January grows from 17 to 22 to 29 as amounts 5 and 7 are appended beyond each saved used range.
 #[test]
 fn whole_columns_include_appended_rows_after_two_xlsx_round_trips() {
     for (declared, expected) in [
