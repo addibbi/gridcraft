@@ -356,8 +356,16 @@ impl PivotWriter {
     }
 }
 
-/// Resolves a pivot source to (sheet, bounded cache scan including headers, declared source XML).
-fn resolve_source(wb: &Workbook, text: &str, default_sheet: usize, depth: u32) -> Option<(usize, RangeRef, String)> {
+/// A source's declared origin is independent of the smaller rectangle containing its used cells.
+struct CacheSource {
+    sheet: usize,
+    declared: RangeRef,
+    scan: RangeRef,
+    xml: String,
+}
+
+/// Resolves the declared source and the bounded rectangle used to find its nonempty records.
+fn resolve_source(wb: &Workbook, text: &str, default_sheet: usize, depth: u32) -> Option<CacheSource> {
     let t = text.trim().trim_start_matches('=').trim();
     if t.is_empty() || depth > 4 {
         return None;
@@ -377,7 +385,7 @@ fn resolve_source(wb: &Workbook, text: &str, default_sheet: usize, depth: u32) -
             && tb.name.starts_with(|c: char| c.is_alphabetic() || c == '_')
             && CellRef::parse(&tb.name).is_none();
         let xml = if valid { format!("<worksheetSource name=\"{}\"/>", esc_attr(&tb.name)) } else { range_source_xml(&sh.name, r) };
-        return Some((si, r, xml));
+        return Some(CacheSource { sheet: si, declared: r, scan: r, xml });
     }
     let (sheet, body) = gridcraft_core::split_sheet(t);
     if let Some(r) = RangeRef::parse(body) {
@@ -389,14 +397,16 @@ fn resolve_source(wb: &Workbook, text: &str, default_sheet: usize, depth: u32) -
         // Bound cache generation, but keep whole-column/row semantics on disk so
         // later refreshes can include data added beyond today's used range.
         let scan = if r.is_full_cols() || r.is_full_rows() { r.intersection(&sh.used_range()?)? } else { r };
-        return Some((si, scan, range_source_xml(&sh.name, r)));
+        return Some(CacheSource { sheet: si, declared: r, scan, xml: range_source_xml(&sh.name, r) });
     }
     if sheet.is_none()
         && let Some(n) = wb.name(t, default_sheet)
     {
-        let (si, r, source_xml) = resolve_source(wb, &n.formula.clone(), default_sheet, depth + 1)?;
-        let xml = if n.scope.is_none() { format!("<worksheetSource name=\"{}\"/>", esc_attr(&n.name)) } else { source_xml };
-        return Some((si, r, xml));
+        let mut source = resolve_source(wb, &n.formula.clone(), default_sheet, depth + 1)?;
+        if n.scope.is_none() {
+            source.xml = format!("<worksheetSource name=\"{}\"/>", esc_attr(&n.name));
+        }
+        return Some(source);
     }
     None
 }
@@ -416,18 +426,28 @@ fn header_text(v: &Value) -> String {
     }
 }
 
+/// Build fields from the declared origin and records from the used scan, within cache limits.
 fn build_cache(wb: &Workbook, pt: &PivotTable, pivot_sheet: usize) -> Option<Cache> {
-    let (si, r, source_xml) = resolve_source(wb, &pt.source, pivot_sheet, 0)?;
-    if r.count() > MAX_SOURCE_CELLS {
+    let source = resolve_source(wb, &pt.source, pivot_sheet, 0)?;
+    let origin = source.declared.start;
+    // Whole rows have no fixed last field: retain today's rightmost used column, but never
+    // move the first field or header row. Whole columns retain their complete declared width.
+    let last_col = if source.declared.is_full_rows() && !source.declared.is_full_cols() { source.scan.end.col } else { source.declared.end.col };
+    let width = u64::from(last_col.saturating_sub(origin.col)).saturating_add(1);
+    let first_row = source.scan.start.row.max(origin.row.saturating_add(1));
+    let data_rows = u64::from(source.scan.end.row).saturating_add(1).saturating_sub(u64::from(first_row));
+    // Include padded fields in the existing source-work limit before allocating or reading.
+    // Empty rows before the used range require no visits; the declared header still does.
+    if width.saturating_mul(data_rows.saturating_add(1)) > MAX_SOURCE_CELLS {
         return None;
     }
-    let sh = wb.sheet(si)?;
+    let sh = wb.sheet(source.sheet)?;
     let mut fields: Vec<CField> = Vec::new();
     // Lower-case names taken, and the next suffix for each header (linear for repeated headers).
     let mut taken = std::collections::HashSet::new();
     let mut next_suffix: HashMap<String, usize> = HashMap::new();
-    for (k, c) in (r.start.col..=r.end.col).enumerate() {
-        let mut h = header_text(&sh.value(CellRef::new(r.start.row, c)).scalar());
+    for (k, c) in (origin.col..=last_col).enumerate() {
+        let mut h = header_text(&sh.value(CellRef::new(origin.row, c)).scalar());
         if h.is_empty() {
             h = format!("Column{}", k + 1);
         }
@@ -454,17 +474,15 @@ fn build_cache(wb: &Workbook, pt: &PivotTable, pivot_sheet: usize) -> Option<Cac
 
     // Records (rows that aren't entirely blank), read once.
     let mut rows: Vec<u32> = Vec::new();
-    if r.end.row > r.start.row {
-        for row in r.start.row + 1..=r.end.row {
-            let blank = (r.start.col..=r.end.col).all(|c| sh.value(CellRef::new(row, c)).scalar().is_empty());
-            if !blank {
-                rows.push(row);
-            }
+    for row in first_row..=source.scan.end.row {
+        let blank = (source.scan.start.col..=source.scan.end.col).all(|c| sh.value(CellRef::new(row, c)).scalar().is_empty());
+        if !blank {
+            rows.push(row);
         }
     }
     for &row in &rows {
         for f in fields.iter_mut() {
-            let c = r.start.col + f.col.unwrap_or(0);
+            let c = origin.col + f.col.unwrap_or(0);
             f.stats.add(&sh.value(CellRef::new(row, c)).scalar());
         }
     }
@@ -581,7 +599,7 @@ fn build_cache(wb: &Workbook, pt: &PivotTable, pivot_sheet: usize) -> Option<Cac
     // Shared items, in order of first appearance.
     for &row in &rows {
         for f in fields.iter_mut().filter(|f| f.itemized) {
-            let c = r.start.col + f.col.unwrap_or(0);
+            let c = origin.col + f.col.unwrap_or(0);
             let v = sh.value(CellRef::new(row, c)).scalar();
             let k = key(&v);
             if !f.index.contains_key(&k) && f.items.len() < MAX_ITEMS {
@@ -597,7 +615,7 @@ fn build_cache(wb: &Workbook, pt: &PivotTable, pivot_sheet: usize) -> Option<Cac
         for &row in &rows {
             s.push_str("<r>");
             for f in fields.iter().filter(|f| f.col.is_some()) {
-                let c = r.start.col + f.col.unwrap_or(0);
+                let c = origin.col + f.col.unwrap_or(0);
                 let v = sh.value(CellRef::new(row, c)).scalar();
                 if f.itemized {
                     match f.index.get(&key(&v)) {
@@ -634,7 +652,7 @@ fn build_cache(wb: &Workbook, pt: &PivotTable, pivot_sheet: usize) -> Option<Cac
             formula: Some(f.to_string()),
         });
     }
-    Some(Cache { fields, axis_map, source_xml, records })
+    Some(Cache { fields, axis_map, source_xml: source.xml, records })
 }
 
 fn group_items(sys: DateSystem, by: PivotDateGroup, start: f64, end: f64) -> Vec<String> {

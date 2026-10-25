@@ -1,6 +1,6 @@
 # File-format parity
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-24 · **Change:** minor (whole-axis PivotTable sources survive XLSX saves while cache scans stay bounded; .xls dialog sheets are skipped instead of read as worksheets; `.xls` import reads each sheet's display options from WINDOW2: right-to-left, gridlines, headings, zeros, formulas; XLSX text boxes and shapes keep their paragraphs' right-to-left direction on save; CSV/TSV/TXT can open with every field kept as text via `file.open {csvAsText}`; formulas over Excel's 8,192 characters, and `%` or call chains past the nesting limit, are parse errors instead of stack overflows when a file is opened; XLSX PivotTables read and write `rowGrandTotals`/`colGrandTotals` the way Excel does, so a table saved with only one grand total opens with the right one; HTML export keeps right-to-left; CSV and text import detects likely Windows-1256 Arabic when invalid UTF-8 has Arabic byte runs; other invalid UTF-8 remains Windows-1252; HTML export places pictures and charts, as inline SVG, at their anchors) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-25 · **Change:** minor (whole-axis PivotTable sources and cache origins survive XLSX saves while scans and padded fields stay bounded; .xls dialog sheets are skipped instead of read as worksheets; `.xls` import reads each sheet's display options from WINDOW2: right-to-left, gridlines, headings, zeros, formulas; XLSX text boxes and shapes keep their paragraphs' right-to-left direction on save; CSV/TSV/TXT can open with every field kept as text via `file.open {csvAsText}`; formulas over Excel's 8,192 characters, and `%` or call chains past the nesting limit, are parse errors instead of stack overflows when a file is opened; XLSX PivotTables read and write `rowGrandTotals`/`colGrandTotals` the way Excel does, so a table saved with only one grand total opens with the right one; HTML export keeps right-to-left; CSV and text import detects likely Windows-1256 Arabic when invalid UTF-8 has Arabic byte runs; other invalid UTF-8 remains Windows-1252; HTML export places pictures and charts, as inline SVG, at their anchors) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
 
 Every format Excel opens or saves, with GridCraft's read and write support, fidelity and tests.
 Part of [target-app-parity.md](target-app-parity.md). **File formats: ~50% ready, 80–120 h**
@@ -15,8 +15,9 @@ Legacy scalar `INDEX(range, MATCH(...))` formulas remain ordinary formulas on sa
 shared formulas are expanded during import (`array_export.rs`, #1505).
 
 Whole-column and whole-row PivotTable sources retain their declared extent across XLSX saves;
-Refresh All after reopening includes newly appended data. Cache generation remains bounded to
-the used range. Generated regressions and limits: [pivot-whole-axis-sources.md](pivot-whole-axis-sources.md).
+Refresh All after reopening includes newly appended data. Cache fields and headers retain the
+declared origin while record scans stay bounded to used cells; source and snapshot limits
+include padded fields. Generated regressions and limits: [pivot-whole-axis-sources.md](pivot-whole-axis-sources.md).
 
 ## Workbook formats
 
@@ -114,6 +115,7 @@ refresh. Counted under features (Get & Transform, ~10% ready), not here.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-25 | minor | Keep PivotTable cache header and field origins aligned with declared whole-axis sources, including leading empty rows/columns and defined names; preserve source and snapshot limits with padded-field accounting. |
 | 2026-10-24 | trivial | Align the whole-axis source contribution with main; retain bounded cache scans and move its engine regressions into the consolidated integration suite |
 | 2026-10-21 | minor | Preserve whole-axis PivotTable sources across XLSX saves, including sheet-local names, while scanning only existing data for cache records; generated round-trip and refresh regressions |
 | 2026-10-21 | minor | HTML (Save as Web Page) writes pictures (`data:` URI `<img>`) and charts (inline SVG from the chart crate's drawing primitives, text included) at their anchors; the table uses the sheet's column widths and row heights when the sheet has either, and output for sheets without pictures or charts is unchanged |
