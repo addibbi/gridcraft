@@ -26,7 +26,13 @@ not change PivotTable source-header validation in the engine.
 Only candidate record rows in the used intersection are visited; empty leading
 rows need no scan. The existing 10-million-cell source limit includes the header
 and every padded field across those candidate rows, checked before building
-fields. The two-million-cell records-snapshot limit also counts padded fields;
+fields. A resolved source that exceeds this limit now returns an explicit XLSX
+save error instead of silently omitting the PivotTable. File Save and Save As
+serialize before writing: a refused save preserves an existing destination file,
+the document's saved snapshot and path, and its unsaved changes. Save Bytes also
+returns the error instead of a partial workbook. Sources that cannot be resolved
+retain the writer's existing behavior; this change concerns the source-work limit.
+The two-million-cell records-snapshot limit also counts padded fields;
 over it, the cache definition is retained without a records snapshot. Fixed
 rectangles and table sources keep their prior bounds. Saving two whole columns
 does not allocate a million cache rows.
@@ -56,7 +62,13 @@ indexes and decoded records through two saves. They cover whole rows with empty
 leading columns, whole columns with empty leading rows and columns, origins other
 than A1 (`C:F` and `5:9`), local/global defined names and a fixed-rectangle control.
 Generated wide sparse cases verify the source limit and records-snapshot limit
-after accounting for padded fields. These tests cover the writer's existing
+after accounting for padded fields. Two cells at `XFD1` and `XFD2000` in an
+`A:XFD` source exceed the source-work limit and must fail serialization. A separate
+case exceeds only the records-snapshot limit and must retain its PivotTable and
+declared source through save/reopen. An engine regression tries Save, Save As and
+Save Bytes with an over-budget cache: existing generated XLSX files remain
+byte-identical, and the workbook, saved snapshot, path, dirty state and undo/redo
+history stay unchanged. These tests cover the writer's existing
 placeholder-header behavior; they do not claim that an empty source header becomes
 a valid input for Refresh or that a desktop Excel comparison was performed.
 
@@ -71,6 +83,7 @@ main provides the `NoLink` implementation; its portal timeout is retained too.
 
 | Date | Change |
 |---|---|
+| 2026-10-25 | Reject XLSX saves that exceed the PivotTable source-work limit instead of silently omitting the pivot; preserve existing files and unsaved document state, without raising either cache limit |
 | 2026-10-25 | Document whole-axis worksheet-source serialization and the generated round-trip test contracts; behavior and coverage thresholds unchanged |
 | 2026-10-25 | Preserve declared header and field origins independently of bounded record scans; count padded fields in source and snapshot limits, with sparse-source regressions |
 | 2026-10-24 | Align with current main and its consolidated engine tests; retain upstream desktop-theme fixes without a PR-specific change |

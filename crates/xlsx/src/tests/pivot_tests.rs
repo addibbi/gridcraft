@@ -169,15 +169,24 @@ fn bounded_pivot_cache_keeps_its_own_header_and_column_origin() {
     assert_sparse_cache(wb, &["Month", "Amount"], &[vec!["Jan", "17"]], 0, 1);
 }
 
-/// Padded fields count toward source-work and snapshot limits before costly cache output.
+/// A source-work overflow fails the save rather than silently dropping the PivotTable.
 #[test]
-fn whole_axis_pivot_cache_padding_still_obeys_source_and_record_limits() {
+fn whole_axis_pivot_cache_padding_over_source_limit_rejects_save() {
     // Two sparse cells have a narrow used range, but padding fields back to A makes
     // 2,000 x 16,384 potential source reads. Refuse before building fields or reading records.
     let cells = [("XFD1", Value::text("Last")), ("XFD2000", Value::Number(17.0))];
     let wb = sparse_pivot_source("Data!$A:$XFD", &cells, "Column1", "Last");
-    let parts = unzip(&write_xlsx(&wb).unwrap());
-    assert!(!parts.contains_key("xl/pivotCache/pivotCacheDefinition1.xml"));
+    let result = write_xlsx(&wb);
+    assert!(result.is_err(), "a resolved over-budget PivotTable must not be silently omitted");
+    let error = result.unwrap_err();
+    assert!(matches!(error, crate::IoError::TooLarge(_)));
+    assert!(error.to_string().contains("PivotTable"));
+    assert!(error.to_string().contains("10000000"));
+}
+
+/// Under the source-work limit, a large snapshot is omitted while its PivotTable is preserved.
+#[test]
+fn whole_axis_pivot_cache_padding_over_record_limit_keeps_definition() {
     // Under the source limit, 1,000 nonempty records with 2,001 padded fields still exceed
     // the existing two-million-cell snapshot limit: retain the definition without records.
     let mut wb = sparse_pivot_source("Data!$1:$1001", &[], "Column1", "Last");
@@ -186,11 +195,15 @@ fn whole_axis_pivot_cache_padding_still_obeys_source_and_record_limits() {
     for row in 1..=1000 {
         sh.cells.set(CellRef::new(row, 2000), Cell::value(Value::Number(17.0)));
     }
-    let parts = unzip(&write_xlsx(&wb).unwrap());
+    let bytes = write_xlsx(&wb).unwrap();
+    let parts = unzip(&bytes);
     let cache = xml::parse(&parts["xl/pivotCache/pivotCacheDefinition1.xml"]).unwrap();
     assert_eq!(cache.attr("saveData"), Some("0"));
     assert_eq!(cache.child("cacheFields").unwrap().children.len(), 2001);
     assert!(!parts.contains_key("xl/pivotCache/pivotCacheRecords1.xml"));
+    assert!(parts.contains_key("xl/pivotTables/pivotTable1.xml"));
+    let reopened = read_xlsx(&bytes).unwrap().0;
+    assert_eq!(reopened.sheet(1).unwrap().pivots[0].source, "Data!$1:$1001");
 }
 
 /// Converts a known-valid fixture date into the workbook's 1900-system serial value.

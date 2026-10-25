@@ -210,6 +210,7 @@ pub fn write_xlsx(wb: &Workbook, kind: XlsxKind) -> Result<Vec<u8>, IoError> {
 
 /// Writes the workbook for the file `book_name` (a bare file name). A PivotChart is bound to its
 /// PivotTable in Excel only when its link starts with the workbook in brackets.
+/// Rejects PivotTable source-work overflows instead of returning a package missing those pivots.
 pub fn write_xlsx_named(wb: &Workbook, kind: XlsxKind, book_name: Option<&str>) -> Result<Vec<u8>, IoError> {
     if wb.sheets.is_empty() {
         return Err(IoError::Format("a workbook needs at least one sheet".into()));
@@ -261,7 +262,7 @@ pub fn write_xlsx_named(wb: &Workbook, kind: XlsxKind, book_name: Option<&str>) 
         sheets_xml.push_str(&before);
         sheet_id = next;
         let (xml, mut rels) = crate::sheet_write::write_sheet(wb, i, i == active, &mut out);
-        pivots.add_sheet(wb, i, &mut out, &mut rels);
+        pivots.add_sheet(wb, i, &mut out, &mut rels)?;
         let name = format!("xl/worksheets/sheet{}.xml", i + 1);
         out.part(&name, Some(CT_WORKSHEET), xml.into_bytes());
         if !rels.is_empty() {

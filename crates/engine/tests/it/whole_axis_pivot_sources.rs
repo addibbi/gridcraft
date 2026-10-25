@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use gridcraft_engine::Session;
 use gridcraft_engine::core::{CellRef, Value};
-use gridcraft_model::{DefinedName, Sheet};
+use gridcraft_model::{Cell, DefinedName, Sheet};
 use serde_json::json;
 
 /// Builds a fictional two-month source and a separate report using the requested source reference.
@@ -77,4 +77,44 @@ fn whole_columns_include_appended_rows_after_two_xlsx_round_trips() {
             assert_report(&s, january, total);
         }
     }
+}
+
+/// An over-budget cache fails all XLSX save paths before overwriting files or marking work saved.
+#[test]
+fn oversized_pivot_cache_save_preserves_files_and_unsaved_document() {
+    let dir = std::env::temp_dir().join(format!("gridcraft-pivot-cache-budget-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let original_path = dir.join("original.xlsx");
+    let save_as_path = dir.join("save-as.xlsx");
+    let mut s = source("Sheet1!$A:$B");
+    s.execute("file.saveAs", json!({"path": original_path})).unwrap();
+    let original_bytes = std::fs::read(&original_path).unwrap();
+    std::fs::write(&save_as_path, &original_bytes).unwrap();
+    assert!(!s.doc().unwrap().is_dirty());
+
+    // Model an imported wide, sparse source without refreshing or allocating the whole range.
+    let wb = Arc::make_mut(&mut s.doc_mut().unwrap().wb);
+    wb.sheet_mut(1).unwrap().pivots[0].source = "Sheet1!$A:$XFD".into();
+    wb.sheet_mut(0).unwrap().cells.set(CellRef::parse("XFD2000").unwrap(), Cell::value(Value::Number(17.0)));
+    let d = s.doc().unwrap();
+    let (before, saved, path, revision, undo, redo) = (d.wb.clone(), d.saved.clone(), d.path.clone(), d.revision, d.undo.len(), d.redo.len());
+    assert!(d.is_dirty());
+
+    for (command, params) in [("file.save", json!({})), ("file.saveAs", json!({"path": save_as_path})), ("file.saveBytes", json!({"format": "xlsx"}))]
+    {
+        let result = s.execute(command, params);
+        assert!(result.is_err(), "{command} must report the oversized cache");
+        let error = result.unwrap_err().to_string();
+        assert!(error.contains("PivotTable"), "{error}");
+        assert!(error.contains("10000000"), "{error}");
+        assert_eq!(std::fs::read(&original_path).unwrap(), original_bytes, "{command}");
+        assert_eq!(std::fs::read(&save_as_path).unwrap(), original_bytes, "{command}");
+        let d = s.doc().unwrap();
+        assert!(Arc::ptr_eq(&d.wb, &before), "{command}");
+        assert!(Arc::ptr_eq(&d.saved, &saved), "{command}");
+        assert_eq!(d.path, path, "{command}");
+        assert_eq!((d.revision, d.undo.len(), d.redo.len()), (revision, undo, redo), "{command}");
+        assert!(d.is_dirty(), "{command}");
+    }
+    std::fs::remove_dir_all(dir).unwrap();
 }

@@ -30,7 +30,7 @@ pub const CT_PIVOT_TABLE: &str = "application/vnd.openxmlformats-officedocument.
 pub const CT_PIVOT_CACHE_DEF: &str = "application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheDefinition+xml";
 pub const CT_PIVOT_CACHE_REC: &str = "application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheRecords+xml";
 
-/// Largest source block scanned for a cache (cells); bigger sources are not written.
+/// Largest source block scanned for a cache (cells); bigger sources fail XLSX serialization.
 const MAX_SOURCE_CELLS: u64 = 10_000_000;
 /// Largest records snapshot written (cells); bigger caches are written without records.
 const MAX_RECORD_CELLS: u64 = 2_000_000;
@@ -285,11 +285,12 @@ struct Pending {
 
 impl PivotWriter {
     /// Writes the caches of a sheet's PivotTables and adds the sheet's relationships to its
-    /// PivotTable parts. Pivots whose source can't be resolved are not written.
-    pub fn add_sheet(&mut self, wb: &Workbook, si: usize, out: &mut Out, rels: &mut Rels) {
-        let Some(sheet) = wb.sheet(si) else { return };
+    /// PivotTable parts. Pivots whose source can't be resolved are not written. A resolved source
+    /// exceeding the source-work limit returns an error so the caller cannot publish a partial file.
+    pub fn add_sheet(&mut self, wb: &Workbook, si: usize, out: &mut Out, rels: &mut Rels) -> Result<(), IoError> {
+        let Some(sheet) = wb.sheet(si) else { return Ok(()) };
         for (idx, pt) in sheet.pivots.iter().enumerate() {
-            let Some(cache) = build_cache(wb, pt, si) else { continue };
+            let Some(cache) = build_cache(wb, pt, si)? else { continue };
             let n = self.caches.len() as u32 + 1;
             let cache_part = format!("xl/pivotCache/pivotCacheDefinition{n}.xml");
             let rec_rid = if let Some((count, xml)) = &cache.records {
@@ -312,6 +313,7 @@ impl PivotWriter {
             out.part(&format!("xl/pivotTables/_rels/pivotTable{t}.xml.rels"), None, tr.xml().into_bytes());
             self.pending.push(Pending { part: format!("xl/pivotTables/pivotTable{t}.xml"), sheet: si, idx, cache_id: n, cache });
         }
+        Ok(())
     }
 
     /// Adds the workbook relationships to the caches; returns the `<pivotCaches>` element (empty
@@ -428,8 +430,9 @@ fn header_text(v: &Value) -> String {
 }
 
 /// Build fields from the declared origin and records from the used scan, within cache limits.
-fn build_cache(wb: &Workbook, pt: &PivotTable, pivot_sheet: usize) -> Option<Cache> {
-    let source = resolve_source(wb, &pt.source, pivot_sheet, 0)?;
+/// An unresolved source yields no cache; a source-work overflow instead fails the whole save.
+fn build_cache(wb: &Workbook, pt: &PivotTable, pivot_sheet: usize) -> Result<Option<Cache>, IoError> {
+    let Some(source) = resolve_source(wb, &pt.source, pivot_sheet, 0) else { return Ok(None) };
     let origin = source.declared.start;
     // Whole rows have no fixed last field: retain today's rightmost used column, but never
     // move the first field or header row. Whole columns retain their complete declared width.
@@ -439,10 +442,14 @@ fn build_cache(wb: &Workbook, pt: &PivotTable, pivot_sheet: usize) -> Option<Cac
     let data_rows = u64::from(source.scan.end.row).saturating_add(1).saturating_sub(u64::from(first_row));
     // Include padded fields in the existing source-work limit before allocating or reading.
     // Empty rows before the used range require no visits; the declared header still does.
-    if width.saturating_mul(data_rows.saturating_add(1)) > MAX_SOURCE_CELLS {
-        return None;
+    let source_cells = width.saturating_mul(data_rows.saturating_add(1));
+    if source_cells > MAX_SOURCE_CELLS {
+        return Err(IoError::TooLarge(format!(
+            "PivotTable \"{}\" cache needs {source_cells} source cells, exceeding the {MAX_SOURCE_CELLS}-cell limit",
+            pt.name
+        )));
     }
-    let sh = wb.sheet(source.sheet)?;
+    let Some(sh) = wb.sheet(source.sheet) else { return Ok(None) };
     let mut fields: Vec<CField> = Vec::new();
     // Lower-case names taken, and the next suffix for each header (linear for repeated headers).
     let mut taken = std::collections::HashSet::new();
@@ -653,7 +660,7 @@ fn build_cache(wb: &Workbook, pt: &PivotTable, pivot_sheet: usize) -> Option<Cac
             formula: Some(f.to_string()),
         });
     }
-    Some(Cache { fields, axis_map, source_xml: source.xml, records })
+    Ok(Some(Cache { fields, axis_map, source_xml: source.xml, records }))
 }
 
 fn group_items(sys: DateSystem, by: PivotDateGroup, start: f64, end: f64) -> Vec<String> {
