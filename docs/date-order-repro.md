@@ -1,6 +1,6 @@
 # Reproduce a missing January row with regional date text
 
-> **Last updated:** 2026-10-21
+> **Last updated:** 2026-10-25
 
 This fictional two-row workbook is generated entirely in Rust. It contains date text,
 `DATEVALUE`, a `YEAR`/`MONTH` label and amounts; a PivotTable sums amounts by month.
@@ -38,7 +38,7 @@ To recover an already-open en-US session, execute `app.region` with `{"region":"
 then `data.refreshAll`. The first recalculates formulas; the second rebuilds the report.
 
 ```sh
-cargo test -p gridcraft-engine --test region_loading --test region_dates
+cargo test -p gridcraft-engine --test it region_
 ```
 
 The generated tests cover both ambiguous and unambiguous January text, two XLSX
@@ -46,13 +46,17 @@ save/open/refresh cycles, MDY/DMY/YMD, pre-open cached formulas and both date sy
 runtime invalidation in several documents, undo/redo returning to the saved state,
 unchanged canonical API input and F2 editing of imported numeric dates.
 
-The branch integrates the official `v0.9.0` tag. File opening preserves its
-`csvAsText` option while setting the workbook region before recalculation. A generated
-CSV regression checks that text-only import keeps `00123` and `13/01/2026` as text,
-that normal CSV import still converts the identifier to a number, and that regional
-`DATEVALUE` yields January in either mode. The integration also uses a zero-sized
-non-Linux desktop-theme handle instead of `()`, so strict Clippy accepts the shared
-watcher on macOS; the Linux portal connection and theme behavior are unchanged.
+The branch integrates main at `17b9f6ff`. File opening retains `csvAsText` while
+setting the workbook region before recalculation, and the CLI keeps the full
+import warning list. A generated CSV regression checks that text-only import keeps
+`00123` and `13/01/2026` as text, that normal CSV import still converts the identifier
+to a number, and that regional `DATEVALUE` yields January in either mode.
+
+The regional parser retains main's finite-number and bounded date/time parsing
+checks and its accounting-parentheses rules. The desktop-theme watcher uses the
+upstream implementation; the earlier platform workaround is no longer part of this
+contribution. Implicit date arguments such as `MONTH(text)` keep their canonical
+en-US interpretation here; the separate #2429 extends those arguments to Region.
 
 This change uses Region from #1524 and its `region-typed-input` parser; it introduces
 no separate DateOrder preference. Regional display, localized formula syntax and wider
