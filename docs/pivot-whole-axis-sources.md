@@ -1,6 +1,6 @@
 # Keep whole-axis PivotTable sources on XLSX save
 
-> **Last updated:** 2026-10-25
+> **Last updated:** 2026-10-26
 
 A PivotTable whose source is `Sheet1!$A:$B` used to save the source as the current
 used rectangle, for example `A1:B3`. After reopening that XLSX file, Refresh All
@@ -74,15 +74,18 @@ a valid input for Refresh or that a desktop Excel comparison was performed.
 
 ## Compatibility with current main
 
-The contribution is aligned with main `3099df934eda27cd457a9b8d1525d3fc973a1b7b`.
+The contribution is aligned with main `f6b0cec67e328f2f6352768b5cb2feb7e562c5db`.
 The engine regressions run in the consolidated `it` test binary. The earlier
 non-Linux desktop-theme workaround is removed from this contribution because
 main provides the `NoLink` implementation; its portal timeout is retained too.
+Upstream shared-window active-sheet access, original sheet IDs and the PivotTable
+Enable show details option are retained alongside cache-budget error propagation.
 
 ## Revision history
 
 | Date | Change |
 |---|---|
+| 2026-10-26 | Align with main at `f6b0cec`, retaining shared-window active-sheet handling, original sheet IDs and Enable show details serialization alongside declared sources, cache origins and unchanged save limits |
 | 2026-10-25 | Reject XLSX saves that exceed the PivotTable source-work limit instead of silently omitting the pivot; preserve existing files and unsaved document state, without raising either cache limit |
 | 2026-10-25 | Document whole-axis worksheet-source serialization and the generated round-trip test contracts; behavior and coverage thresholds unchanged |
 | 2026-10-25 | Preserve declared header and field origins independently of bounded record scans; count padded fields in source and snapshot limits, with sparse-source regressions |
