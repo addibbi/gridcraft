@@ -4,6 +4,7 @@ use gridcraft_engine::core::{CellError, CellRef, DateSystem, Value};
 use gridcraft_engine::{DocState, Prefs, Session, Trust, find_region};
 use gridcraft_model::Workbook;
 use serde_json::json;
+use std::sync::Arc;
 
 /// Read a calculated cell in the active sheet.
 fn value(s: &Session, cell: &str) -> Value {
@@ -107,4 +108,60 @@ fn xlsx_does_not_replace_the_applications_region() {
     assert_eq!(reopened.doc().unwrap().wb.region.tag, "en-US");
     assert_eq!(value(&reopened, "A1"), Value::Error(CellError::Value));
     assert!(!reopened.doc().unwrap().is_dirty());
+}
+
+#[test]
+/// Keep an embedder's cached values when its workbook already uses the session region.
+fn saved_workbook_with_matching_region_keeps_cached_values_until_an_edit_reaches_them() {
+    let mut source = Session::new();
+    source.set_region("it-IT").unwrap();
+    source.new_workbook();
+    source.execute("range.setValues", json!({"range": "A1", "values": [["'02/01/2026", "=DATEVALUE(A1)", "=DAY(B1)", "=10"]]})).unwrap();
+    let mut wb = (*source.doc().unwrap().wb).clone();
+    // Deliberately distinct caches prove that attaching the document does not recalculate it.
+    for (address, cached) in [("B1", 123.0), ("C1", 77.0), ("D1", 7.0)] {
+        let sheet = Arc::make_mut(&mut wb.sheets[0]);
+        let at = CellRef::parse(address).unwrap();
+        let mut cell = sheet.cell(at).unwrap().clone();
+        cell.value = Value::Number(cached);
+        sheet.set_cell(at, cell);
+    }
+    let doc = DocState::from_saved(wb, None, "cached-regional-dates.xlsx".into(), Trust::FromFile);
+    let original = doc.wb.clone();
+    let mut s = Session::new();
+    s.set_region("it_IT").unwrap();
+    s.add_document(doc);
+    assert!(Arc::ptr_eq(&original, &s.doc().unwrap().wb), "a matching region must not replace the cached workbook");
+    s.execute("app.region", json!({"region": "it-IT"})).unwrap();
+    for (address, cached) in [("B1", 123.0), ("C1", 77.0), ("D1", 7.0)] {
+        assert_eq!(value(&s, address), Value::Number(cached));
+    }
+    assert!(!s.doc().unwrap().is_dirty());
+    s.execute("cell.set", json!({"cell": "A1", "input": "'03/01/2026"})).unwrap();
+    assert_eq!(value(&s, "B1"), Value::Number(46025.0));
+    assert_eq!(value(&s, "C1"), Value::Number(3.0));
+    assert_eq!(value(&s, "D1"), Value::Number(7.0), "an unrelated cached formula remains untouched");
+    assert!(s.doc().unwrap().is_dirty());
+}
+
+#[test]
+/// Apply a different session region to an attached saved document without marking it edited.
+fn saved_workbook_with_different_region_recalculates_and_opens_a_window() {
+    let mut source = Session::new();
+    source.new_workbook();
+    source.execute("range.setValues", json!({"range": "A1", "values": [["'02/01/2026", "=DATEVALUE(A1)", "=DAY(B1)"]]})).unwrap();
+    let doc = DocState::from_saved((*source.doc().unwrap().wb).clone(), None, "regional-dates.xlsx".into(), Trust::FromFile);
+    assert_eq!(doc.wb.active().unwrap().value(CellRef::parse("B1").unwrap()), Value::Number(46054.0));
+    let uid = doc.uid;
+    let mut s = Session::new();
+    s.set_region("it-IT").unwrap();
+    assert_eq!(s.add_document(doc), 0);
+    assert_eq!(s.windows().len(), 1);
+    assert_eq!(s.window(s.active_window().unwrap()).unwrap().doc_uid, uid);
+    assert_eq!(s.doc().unwrap().wb.region.tag, "it-IT");
+    assert_eq!(value(&s, "B1"), Value::Number(46024.0));
+    assert_eq!(value(&s, "C1"), Value::Number(2.0));
+    assert!(!s.doc().unwrap().is_dirty());
+    assert!(s.doc().unwrap().undo.is_empty());
+    assert!(s.doc().unwrap().redo.is_empty());
 }

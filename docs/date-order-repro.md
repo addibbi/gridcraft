@@ -1,6 +1,6 @@
 # Reproduce a missing January row with regional date text
 
-> **Last updated:** 2026-10-24
+> **Last updated:** 2026-10-26
 
 This fictional two-row workbook is generated entirely in Rust. It contains date text,
 `DATEVALUE`, a `YEAR`/`MONTH` label and amounts; a PivotTable sums amounts by month.
@@ -63,12 +63,28 @@ the workbook's 1900/1904 calendar are also covered by function regressions:
 cargo test -p gridcraft-functions --lib date::tests
 ```
 
-File opening preserves `csvAsText` while setting the workbook region before
-recalculation. A generated CSV regression checks that text-only import keeps `00123`
-and `13/01/2026` as text, that normal CSV import still converts the identifier to a
-number, and that regional `DATEVALUE` yields January in either mode.
+The branch integrates #1886 at `c17393c3` and main at `f6b0cec6`. File opening
+retains `csvAsText` while setting the workbook region before recalculation, and the
+CLI keeps the full import warning list. A generated CSV regression checks that
+text-only import keeps `00123` and `13/01/2026` as text, that normal CSV import still
+converts the identifier to a number, and that regional `DATEVALUE` yields January
+in either mode.
 
-This change uses Region from #1524 and its `region-typed-input` parser; it introduces
+Opening documents preserves main's shared-workbook window lifecycle and control-token
+authentication. An embedder using `DocState::from_saved` keeps cached values when the
+workbook already has the session Region; attaching a workbook with a different Region
+recalculates it while preserving its saved state. All windows of the same workbook
+share one regional recalculation and one undo history.
+
+The regional parser retains main's finite-number and bounded date/time parsing
+checks and its accounting-parentheses rules. The ISO-week regressions cover numeric
+serials and Italian date text at the start of both supported calendars. The
+desktop-theme watcher uses the upstream implementation; the earlier platform workaround is no longer part of this
+contribution. This #2429 follow-up extends implicit date arguments such as
+`MONTH(text)` to Region while numeric serial text remains canonical en-US.
+
+This change retains the Region data associated with #1524 and the original
+`region-typed-input` parser history at `ccd3e1c`; it introduces
 no separate DateOrder preference. Regional display, localized formula syntax and wider
 input/coercion changes remain separate work. The example refuses to overwrite an
 existing file; all fixture data is original and fictional.

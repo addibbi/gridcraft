@@ -1,8 +1,9 @@
 //! Region changes recalculate formula dates without changing canonical command input.
 
-use gridcraft_engine::Session;
 use gridcraft_engine::core::{CellError, CellRef, Value};
+use gridcraft_engine::{Session, Target};
 use serde_json::json;
+use std::sync::Arc;
 
 /// Read a calculated cell in the active sheet.
 fn value(s: &Session, cell: &str) -> Value {
@@ -237,4 +238,64 @@ fn changing_region_recovers_january_without_rewriting_source_formulas() {
     let refreshed = s.execute("data.refreshAll", json!({})).unwrap();
     assert_eq!(refreshed, json!({"refreshed": 1, "errors": []}));
     assert_datevalue_month_report(&s, "13/01/2026", 46035.0);
+}
+
+#[test]
+/// Share regional recalculation and history across windows while preserving their distinct views.
+fn region_changes_and_undo_redo_share_one_workbook_between_windows() {
+    let mut source = Session::new();
+    source.new_workbook();
+    for sheet in 0..2 {
+        if sheet == 1 {
+            source.execute("home.insertSheet", json!({"name": "Second"})).unwrap();
+        }
+        source.execute("cell.set", json!({"cell": "A1", "input": "=DATEVALUE(\"02/01/2026\")"})).unwrap();
+        source.execute("cell.set", json!({"cell": "A2", "input": "=DAY(A1)"})).unwrap();
+    }
+    let saved = source.execute("file.saveBytes", json!({"format": "xlsx"})).unwrap();
+    let mut s = Session::new();
+    s.execute("file.open", json!({"name": "regional-windows.xlsx", "base64": saved["base64"]})).unwrap();
+    let uid = s.doc().unwrap().uid;
+    s.execute("sheet.activate", json!({"sheet": 0})).unwrap();
+    s.execute("selection.set", json!({"range": "B4"})).unwrap();
+    let first = s.active_window().unwrap();
+    let second = s.new_window().unwrap();
+    s.execute("sheet.activate", json!({"sheet": 1})).unwrap();
+    s.execute("selection.set", json!({"range": "D6"})).unwrap();
+    assert!(!s.doc().unwrap().is_dirty());
+    s.execute_in(Target::Window(first), "cell.set", json!({"cell": "B1", "input": "5"})).unwrap();
+    assert_eq!(s.active_window(), Some(second));
+    assert_eq!(s.doc().unwrap().undo.len(), 1);
+    s.execute("app.region", json!({"region": "it-IT"})).unwrap();
+    assert_eq!(s.active_window(), Some(second));
+    assert_eq!(s.documents().len(), 1);
+    assert_eq!(s.windows().len(), 2);
+    assert!(s.windows().iter().all(|w| w.doc_uid == uid));
+    assert_eq!(s.doc().unwrap().undo.len(), 1, "a region change is not a workbook edit");
+    let regional = s.doc().unwrap().wb.clone();
+    for (window, sheet, selection) in [(first, 0, "B4"), (second, 1, "D6")] {
+        s.activate_window(window);
+        let d = s.doc().unwrap();
+        assert_eq!(d.wb.active_sheet(), sheet);
+        assert_eq!(d.selection.a1(), selection);
+        assert_eq!(d.wb.region.tag, "it-IT");
+        assert!(Arc::ptr_eq(&regional, &d.wb), "switching windows must retain the shared regional workbook");
+        assert_eq!(value(&s, "A1"), Value::Number(46024.0));
+        assert_eq!(value(&s, "A2"), Value::Number(2.0));
+        assert!(d.is_dirty());
+    }
+    for (command, expected_edit, dirty) in [("edit.undo", Value::Empty, false), ("edit.redo", Value::Number(5.0), true)] {
+        s.execute_in(Target::Window(first), command, json!({})).unwrap();
+        assert_eq!(s.active_window(), Some(second), "a command routed to the other window restores the active window");
+        let d = s.doc().unwrap();
+        assert_eq!(d.uid, uid);
+        assert_eq!(d.wb.region.tag, "it-IT");
+        assert_eq!(d.is_dirty(), dirty);
+        assert_eq!(d.wb.sheets[0].value(CellRef::parse("B1").unwrap()), expected_edit);
+        assert_eq!(d.wb.sheets[1].value(CellRef::parse("B1").unwrap()), Value::Empty);
+        for sheet in &d.wb.sheets {
+            assert_eq!(sheet.value(CellRef::parse("A1").unwrap()), Value::Number(46024.0));
+            assert_eq!(sheet.value(CellRef::parse("A2").unwrap()), Value::Number(2.0));
+        }
+    }
 }

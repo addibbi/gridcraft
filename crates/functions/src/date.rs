@@ -131,8 +131,16 @@ fn weekday(a: &[Arg], c: &mut dyn Ctx) -> R<Value> {
 fn isoweek(sys: DateSystem, s: i64) -> R<i64> {
     let iso_wd = (weekday0(sys, s) + 6) % 7 + 1; // Monday = 1
     let thursday = s - iso_wd as i64 + 4;
-    let y = if thursday < 1 { 1900 } else { dt(sys, thursday as f64)?.year as i64 };
-    let jan1 = ymd_serial(sys, y, 1, 1)?;
+    let first = match sys {
+        DateSystem::D1900 => 1,
+        DateSystem::D1904 => 0,
+    };
+    let jan1 = if thursday < first {
+        // The week belongs to the year before the calendar starts.
+        first - 365
+    } else {
+        ymd_serial(sys, dt(sys, thursday as f64)?.year as i64, 1, 1)?
+    };
     Ok((thursday - jan1).div_euclid(7) + 1)
 }
 
@@ -446,18 +454,14 @@ pub(crate) fn yearfrac_core(sys: DateSystem, s: i64, e: i64, basis: i64) -> R<f6
     Ok(match basis {
         0 => {
             let (mut a, mut b) = (d1.day as i64, d2.day as i64);
-            if a == 31 && b == 31 {
-                a = 30;
+            if last_of_feb(&d1) && last_of_feb(&d2) {
                 b = 30;
-            } else if a == 31 {
+            }
+            if last_of_feb(&d1) || a == 31 {
                 a = 30;
-            } else if a == 30 && b == 31 {
+            }
+            if a == 30 && b == 31 {
                 b = 30;
-            } else if last_of_feb(&d1) && last_of_feb(&d2) {
-                a = 30;
-                b = 30;
-            } else if last_of_feb(&d1) {
-                a = 30;
             }
             ((d2.year as i64 - d1.year as i64) * 360 + (d2.month as i64 - d1.month as i64) * 30 + b - a) as f64 / 360.0
         }
@@ -817,6 +821,13 @@ mod tests {
     }
 
     #[test]
+    fn yearfrac_basis0_feb_end_to_31() {
+        close(ev("YEARFRAC", vec![n(d(2021.0, 2.0, 28.0)), n(d(2021.0, 3.0, 31.0)), n(0.0)]), 30.0 / 360.0);
+        close(ev("YEARFRAC", vec![n(d(2020.0, 2.0, 29.0)), n(d(2020.0, 3.0, 31.0)), n(0.0)]), 30.0 / 360.0);
+        close(ev("YEARFRAC", vec![n(d(2021.0, 2.0, 28.0)), n(d(2021.0, 2.0, 28.0)), n(0.0)]), 0.0);
+    }
+
+    #[test]
     fn date_lifting() {
         let v = ev("YEAR", vec![av(row(&[43831.0, 46302.0]))]);
         assert_eq!(rows_of(&v), vec![vec![nv(2020.0), nv(2026.0)]]);
@@ -1019,6 +1030,36 @@ mod tests {
             ));
             let result = crate::call(crate::lookup("MONTH").unwrap(), &[dates], &mut ctx);
             assert_eq!(rows_of(&result), vec![vec![nv(1.0), nv(2.0)]]);
+        }
+    }
+
+    #[test]
+    fn isoweek_at_calendar_start() {
+        let iso = crate::lookup("ISOWEEKNUM").unwrap();
+        let wk = crate::lookup("WEEKNUM").unwrap();
+        let mut ctx = TestCtx::default();
+        close(crate::call(iso, &[n(1.0)], &mut ctx), 52.0);
+        close(crate::call(wk, &[n(1.0), n(21.0)], &mut ctx), 52.0);
+        let mut ctx = TestCtx { sys: gridcraft_core::DateSystem::D1904, ..TestCtx::default() };
+        for s in [0.0, 1.0, 2.0] {
+            close(crate::call(iso, &[n(s)], &mut ctx), 53.0);
+        }
+    }
+
+    /// Regional text keeps the ISO-week boundary fix for both supported calendar epochs.
+    #[test]
+    fn isoweek_regional_text_at_calendar_start() {
+        let iso = crate::lookup("ISOWEEKNUM").unwrap();
+        let week = crate::lookup("WEEKNUM").unwrap();
+        for (sys, dates, expected) in [
+            (gridcraft_core::DateSystem::D1900, vec!["01/01/1900"], 52.0),
+            (gridcraft_core::DateSystem::D1904, vec!["01/01/1904", "02/01/1904", "03/01/1904"], 53.0),
+        ] {
+            let mut ctx = TestCtx { sys, region: gridcraft_core::region::find("it-IT").unwrap(), ..TestCtx::default() };
+            for date in dates {
+                close(crate::call(iso, &[t(date)], &mut ctx), expected);
+                close(crate::call(week, &[t(date), n(21.0)], &mut ctx), expected);
+            }
         }
     }
 
