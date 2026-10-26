@@ -1,6 +1,6 @@
 # Function parity: worksheet functions and formulas
 
-> **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-25 · **Change:** minor (preserve the unused IFERROR fallback guard alongside upstream stack-budget and circular-diagnostic hardening; the LAMBDA row lists the recursion limit and its `#NUM!`, and the error a defined name holding an error gives when called; earlier: number text with accounting parentheses coerces like Excel 365; INDEX with one index on a 2-D reference is #REF! as in Excel; earlier: SUBTOTAL and AGGREGATE cap the cells they visit, #2175) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
+> **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-26 · **Change:** minor (preserve the unused IFERROR fallback guard alongside upstream stack-budget and circular-diagnostic hardening; the LAMBDA row lists the recursion limit and its `#NUM!`, and the error a defined name holding an error gives when called; earlier: number text with accounting parentheses coerces like Excel 365; INDEX with one index on a 2-D reference is #REF! as in Excel; earlier: SUBTOTAL and AGGREGATE cap the cells they visit, #2175) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
 
 Excel's worksheet functions, category by category, against GridCraft's function library. Part of
 [target-app-parity.md](target-app-parity.md); gaps feed [gaps.md](gaps.md).
@@ -33,6 +33,7 @@ Excel's worksheet functions, category by category, against GridCraft's function 
 
 | Category | Excel | Ours | Working | % working | Missing |
 |---|---|---|---|---|---|
+| 2026-10-26 | minor | Align the IFERROR follow-up with main at `f6b0cec`; preserve the unused-fallback guard, primary SUMPRODUCT regression and streamed/materialized suspension-count controls |
 | Statistical | 111 | 111 | 111 | 100% | — |
 | Math and trigonometry | 80 | 79 | 79 | 99% | PERCENTOF |
 | Financial | 55 | 55 | 55 | 100% | — |
@@ -64,6 +65,7 @@ This improves series preparation; it does not change the model-fitting or season
 
 | Function(s) | In scope? | Estimate | Note |
 |---|---|---|---|
+| 2026-10-26 | minor | Align the IFERROR follow-up with main at `f6b0cec`; preserve the unused-fallback guard, primary SUMPRODUCT regression and streamed/materialized suspension-count controls |
 | FORECAST.ETS family (4) | yes | 4–6 h | AAA exponential smoothing with seasonality detection; needed for Forecast Sheet too |
 | ODDFPRICE, ODDFYIELD, ODDLPRICE, ODDLYIELD | yes | 2–4 h | Odd first/last period bond maths |
 | GETPIVOTDATA | yes | 2–3 h | Needs the pivot engine's result cache; also the "Generate GetPivotData" option |
@@ -93,7 +95,7 @@ regressions and scope: [iferror-unused-fallback.md](iferror-unused-fallback.md).
 | Array lifting: an array in a scalar argument evaluates the function per element | done. The Analysis ToolPak functions (EOMONTH, EDATE, WORKDAY(.INTL), NETWORKDAYS(.INTL), YEARFRAC, WEEKNUM, the COUP*, PRICE*, YIELD*, ODD*, TBILL*, ACCRINT*, AMOR*, DISC, DURATION, CUMIPMT/CUMPRINC, EFFECT, NOMINAL, DOLLARDE/FR, XNPV/XIRR rate and guess, FVSCHEDULE principal, ISEVEN/ISODD, QUOTIENT, MROUND, FACTDOUBLE, SQRTPI, RANDBETWEEN, SERIESSUM, the base conversions, CONVERT, DELTA, GESTEP, ERF/ERFC, BESSEL*, COMPLEX and IM* except IMSUM/IMPRODUCT) give `#VALUE!` for a reference to more than one cell in a value argument, as Excel 365 does in both dynamic-array and legacy formulas; array constants and computed arrays (`A1:A3+0`) still lift, and range arguments (holidays, schedule, cash flows) and the .INTL weekend accept ranges. Difference: BYROW/BYCOL pass their row or column to the LAMBDA as values, so `BYROW(A1:B3,LAMBDA(r,EOMONTH(r,0)))` lifts where Excel gives `#VALUE!` |
 | Trim references `A1:.E10` (trailing), `A1.:E10` (leading), `A1.:.E10` (both), also on whole rows/columns (`A:.A`) | done; evaluated as `TRIMRANGE(range, code, code)`, adjusted on insert/delete; files store `_xlfn.TRIMRANGE(range,code,code)` (Excel's own file spelling unconfirmed in public docs), `_xlfn._TRO_ALL/_TRO_LEADING/_TRO_TRAILING(...)` read too |
 | LET, LAMBDA, named LAMBDAs, ISOMITTED, MAP/REDUCE/SCAN/BYROW/BYCOL/MAKEARRAY | done. A LAMBDA that calls itself more than 140 times, or a formula nested past the depth limit, gives `#NUM!` (the target app allows deeper recursion, #1581). Calling a defined name that holds an error value gives that error, not `#NAME?` |
-| Iterative calculation for circular references | done: with Enable Iterative Calculation on (`formulas.calculationOptions` `{iterative, maxIterations, maxChange}`, saved as `<calcPr iterate iterateCount iterateDelta>`), loops are evaluated again from their previous values (blank = 0) until no cell on a loop changes by Maximum Change or Maximum Iterations is reached; off, cycles give `#CIRC!`. Differences: no Options dialog yet (command only); GridCraft recalculates on open, so a loop that never settles (`=A1+1`) advances again each time the file is opened |
+| Iterative calculation for circular references | done: with Enable Iterative Calculation on (`formulas.calculationOptions` `{iterative, maxIterations, maxChange}`, saved as `<calcPr iterate iterateCount iterateDelta>`), loops are evaluated again from their previous values (blank = 0) until no cell on a loop changes by Maximum Change or Maximum Iterations is reached; off, cycles give `#CIRC!`. Set in File › Options › Formulas (Enable iterative calculation, Maximum Iterations 1 to 32767, Maximum Change 0 or more; the two fields are disabled while iteration is off). Differences: GridCraft recalculates on open, so a loop that never settles (`=A1+1`) advances again each time the file is opened
 | 15-significant-digit comparison semantics | done (#57): `=0.1+0.2=0.3` is TRUE, and MATCH and COUNTIF compare the same way. Arithmetic keeps full precision, as Excel does — `=(0.1+0.2)-0.3` is 5.55E-17 |
 | External workbook references (`[Book.xlsx]Sheet1!A1`) | parsed; links dropped on open, no update |
 | Localized function names and `;` separators | **missing** (#45); en-US only |
@@ -128,6 +130,7 @@ workbooks; results checked in as data, not Excel files) and fixing what it finds
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-26 | minor | Align the IFERROR follow-up with main at `f6b0cec`; preserve the unused-fallback guard, primary SUMPRODUCT regression and streamed/materialized suspension-count controls |
 | 2026-10-25 | minor | Add a generated primary SUMPRODUCT regression at the nesting limit, checking calculated values and absence of circular diagnostics |
 | 2026-10-25 | minor | Align the IFERROR follow-up with main at `17b9f6f`, retaining upstream stack-budget handling and circular diagnostics alongside the range batching guard and generated regressions |
 | 2026-10-25 | minor | LAMBDA row: a LAMBDA that calls itself more than 140 times, and a formula nested past the depth limit, give `#NUM!` (#1809; nesting gave `#CALC!` before). `=Foo(1)` where the defined name Foo holds `#N/A` gives `#N/A`, not `#NAME?` |
@@ -140,6 +143,7 @@ workbooks; results checked in as data, not Excel files) and fixing what it finds
 | 2026-10-19 | minor | Long flat operator chains (#916): 4,096 operands (Excel's 8,192-character limit) no longer overflow the stack when entered, filled, adjusted or saved; chains past 64 operands are no longer saved as dynamic-array formulas; Spanish entry no longer refuses chains past 256 operands |
 | 2026-10-17 | minor | 15-significant-digit comparison moved from missing to done (#57), and the resolved caveats on the 3-D reference, dynamic-array and legacy-array rows cleared (#140, #133, #139, #156) |
 | 2026-10-16 | minor | FORECAST.ETS gap interpolation uses a forward-only known-point scan instead of rescanning each gap for every missing value; numerical behavior and missing-point limits are preserved (#1042) |
+| 2026-10-15 | minor | Iterative calculation: Maximum Iterations and Maximum Change are set in File › Options › Formulas (dropped "no Options dialog yet") |
 | 2026-10-15 | minor | MEDIAN and AGGREGATE median use an overflow-safe midpoint (#1579); regressions cover finite extremes, tiny values and dependent recalculation |
 | 2026-10-15 | minor | ADDRESS quotes a sheet name the way Excel does: names that read as an A1 cell (`A1`) or an R1C1 reference (`R1C1`, `RC`) and names starting with `.` get quotes; `TRUE` / `FALSE` stay bare (#1458) |
 | 2026-10-14 | minor | MATCH, XMATCH, VLOOKUP, HLOOKUP, XLOOKUP and LOOKUP compare numbers exactly in every match and search mode, as Excel 365 does: `MATCH(0.1+0.2,{0.3},0)` is `#N/A` and 0.3 sorts below 0.30000000000000004 in approximate and binary search. `=`, SWITCH and the criteria functions (COUNTIF(S), SUMIF(S), AVERAGEIF(S), MAXIFS…) keep comparing at 15 significant digits, also as observed |

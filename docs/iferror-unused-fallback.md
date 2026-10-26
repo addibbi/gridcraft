@@ -1,9 +1,9 @@
 # Unused IFERROR fallbacks during suspended recalculation
 
-> **Last updated:** 2026-10-25
+> **Last updated:** 2026-10-26
 
 This is a follow-up to PR #1340's bounded-stack recalculation, now merged upstream.
-The branch is aligned with `main` at `17b9f6f`; it preserves the parent's batched
+The branch is aligned with `main` at `f6b0cec`; it preserves the parent's batched
 dependencies, waiting guards and deduplication, plus upstream stack-budget handling
 and circular diagnostics after undo/redo or rollback. The remaining change is the
 range batching guard and the generated regression coverage described below.
@@ -56,6 +56,7 @@ are generated in Rust; no private workbook or Excel-produced fixture is included
 
 | Date | Change |
 |---|---|
+| 2026-10-26 | Align with main at `f6b0cec`, preserving the IFERROR guard, primary SUMPRODUCT coverage, 3,000-cell suspension limits and upstream circular/stack protections |
 | 2026-10-25 | Document the touched recalculation methods, synthetic fixture helpers and regression expectations without changing behavior or coverage thresholds |
 | 2026-10-25 | Cover a primary materialized SUMPRODUCT range at the nesting limit, with expected values and no circular diagnostics; all seven integration cases use generated fictional workbooks, and the 3,000-cell suspension-count control covers SUM and SUMPRODUCT |
 | 2026-10-25 | Align with main at `17b9f6f`, keeping upstream stack-budget and circular-diagnostic changes alongside the unchanged range batching guard and generated regressions |
