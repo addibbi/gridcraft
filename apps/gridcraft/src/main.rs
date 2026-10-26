@@ -1,6 +1,6 @@
 //! GridCraft desktop app.
 //!
-//! Usage: `gridcraft [--control <port>] [--sample <name>] [--region <tag>] [files…]`
+//! Usage: `gridcraft [--control <port> [--control-token <token>]] [--sample <name>] [--region <tag>] [files…]`
 //!
 //! `--region <tag>` (or `--region=<tag>`) overrides the saved region for DATEVALUE and
 //! TIMEVALUE before the first workbook recalculation. The default is en-US; this choice
@@ -8,6 +8,7 @@
 //!
 //! `--control <port>` (or `GRIDCRAFT_CONTROL_PORT`) starts a localhost JSON-lines control
 //! server: `{"id":1,"method":"ui.inspect","params":{}}` → `{"id":1,"ok":true,"result":…}`.
+//! The first line of each connection must carry the token (`docs/control-protocol.md`).
 //! See `gridcraft_ui_egui::control` and `docs/control-protocol.md` for the methods.
 #![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
@@ -26,31 +27,34 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use gridcraft_engine::Session;
+use gridcraft_ui_egui::doc_windows::DocWindows;
 use gridcraft_ui_egui::{Services, SheetApp};
 use serde_json::json;
 
-struct App(SheetApp, #[cfg(target_os = "macos")] Option<native_menu::NativeMenu>, #[cfg(target_os = "macos")] fmv_macos_events::Inbox);
+/// The app, its native window per workbook window, and (macOS) the menu bar and Finder events.
+struct App(SheetApp, DocWindows, #[cfg(target_os = "macos")] Option<native_menu::NativeMenu>, #[cfg(target_os = "macos")] fmv_macos_events::Inbox);
 
 impl eframe::App for App {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         #[cfg(target_os = "macos")]
         {
-            if self.1.is_none() && std::env::var_os("GRIDCRAFT_NO_NATIVE_MENU").is_none() {
-                self.1 = Some(native_menu::NativeMenu::install(ctx));
+            if self.2.is_none() && std::env::var_os("GRIDCRAFT_NO_NATIVE_MENU").is_none() {
+                self.2 = Some(native_menu::NativeMenu::install(ctx));
             }
-            if let Some(m) = &self.1 {
-                m.poll(&mut self.0, ctx);
+            if let Some(m) = &mut self.2 {
+                m.poll(&mut self.0, ctx, self.1.focused_viewport());
             }
-            apple_events::poll(&self.2, &mut self.0, ctx);
+            apple_events::poll(&self.3, &mut self.0, ctx);
         }
         self.0.logic(ctx);
-        self.0.poll_printing(ctx);
+        self.1.logic(&mut self.0, ctx);
         if ctx.input(|input| input.viewport().close_requested()) && self.0.printing.busy() {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
         }
     }
-    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw: &mut egui::RawInput) {
-        self.0.raw_input_hook(raw);
+    /// Forwards raw input to the shared app, then opens every non-empty dropped file path as a workbook.
+    fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
+        self.0.raw_input_hook(ctx, raw);
         // Files dropped on the window open as workbooks.
         for f in std::mem::take(&mut raw.dropped_files) {
             if let Some(p) = f.path().to_str().map(str::to_string).filter(|p| !p.is_empty()) {
@@ -59,7 +63,7 @@ impl eframe::App for App {
         }
     }
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        self.0.ui(ui);
+        self.1.show(&mut self.0, ui);
     }
     fn on_exit(&mut self) {
         print::finish_pending_jobs();
@@ -186,11 +190,11 @@ fn services() -> Services {
         })),
         pick_save: Some(Box::new(|suggested: &str| {
             let path = std::path::Path::new(suggested);
-            let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("Book1").to_string();
+            let stem = path.file_stem().and_then(std::ffi::OsStr::to_str).unwrap_or("Book1").to_string();
             // The suggested name's type (an export asks for .pdf, .csv or .html) comes first.
             const TYPES: [(&str, &str); 4] =
                 [("Excel Workbook (.xlsx)", "xlsx"), ("CSV UTF-8 (.csv)", "csv"), ("Web Page (.html)", "html"), ("PDF (.pdf)", "pdf")];
-            let ext = path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).filter(|e| TYPES.iter().any(|(_, x)| x == e));
+            let ext = path.extension().and_then(std::ffi::OsStr::to_str).map(str::to_ascii_lowercase).filter(|e| TYPES.iter().any(|(_, x)| x == e));
             let ext = ext.unwrap_or_else(|| "xlsx".to_string());
             let mut dialog = rfd::FileDialog::new().set_file_name(format!("{stem}.{ext}"));
             for (label, x) in TYPES.iter().filter(|(_, x)| *x == ext).chain(TYPES.iter().filter(|(_, x)| *x != ext)) {
@@ -236,12 +240,22 @@ fn icon() -> Option<egui::IconData> {
 }
 
 /// Removes and validates the region override before any workbook is created or opened.
-/// Other startup arguments retain their existing interpretation; tags use canonical spelling.
+/// Other startup arguments retain their existing interpretation, including opaque option values.
+/// Region tags use canonical spelling.
 fn region_args(args: &[String]) -> Result<(Vec<String>, Option<String>), String> {
     let mut remaining = Vec::new();
     let mut region = None;
     let mut it = args.iter();
     while let Some(arg) = it.next() {
+        // A token or sample name may itself look like a Region flag. Keep option values
+        // opaque so the native argument parser receives exactly the payload it was given.
+        if matches!(arg.as_str(), "--control" | "--control-token" | "--sample") {
+            remaining.push(arg.clone());
+            if let Some(value) = it.next() {
+                remaining.push(value.clone());
+            }
+            continue;
+        }
         let value = if arg == "--region" {
             Some(it.next().ok_or("--region needs a tag such as en-GB or it-IT")?.as_str())
         } else {
@@ -279,6 +293,14 @@ fn main() -> eframe::Result<()> {
         }
     }));
     let args: Vec<String> = std::env::args().skip(1).collect();
+    // The restart helper a self-update spawns: it finishes the swap and relaunches, then exits.
+    if let Some(done) = craft_update::self_update::finish(&craft_update::suite::GRIDCRAFT, &std::env::args_os().skip(1).collect::<Vec<_>>()) {
+        if let Err(e) = done {
+            eprintln!("GridCraft update helper failed: {e}");
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
     if args.iter().any(|a| a == "--version" || a == "-V") {
         println!("GridCraft {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
@@ -291,6 +313,7 @@ fn main() -> eframe::Result<()> {
         }
     };
     let mut control_port: Option<u16> = std::env::var("GRIDCRAFT_CONTROL_PORT").ok().and_then(|p| p.parse().ok());
+    let mut control_token: Option<String> = std::env::var("GRIDCRAFT_CONTROL_TOKEN").ok();
     let mut sample: Option<String> = None;
     let mut files: Vec<String> = Vec::new();
     let mut i = 0;
@@ -299,6 +322,10 @@ fn main() -> eframe::Result<()> {
             "--control" => {
                 i += 1;
                 control_port = args.get(i).and_then(|p| p.parse().ok());
+            }
+            "--control-token" => {
+                i += 1;
+                control_token = args.get(i).cloned();
             }
             "--sample" => {
                 i += 1;
@@ -339,6 +366,7 @@ fn main() -> eframe::Result<()> {
     if app.session.documents().is_empty() {
         app.session.new_workbook();
     }
+    app.start_update_check();
     app.after_engine(); // Show warnings from the sample.
     let control_port = control_port;
     // Files named on the command line (a double-click on Windows and Linux) open as File › Open
@@ -359,7 +387,20 @@ fn main() -> eframe::Result<()> {
     if let Some(i) = icon() {
         viewport = viewport.with_icon(i);
     }
+    let window_builder = viewport.clone();
     let options = eframe::NativeOptions { viewport, ..Default::default() };
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut options = options;
+    // winit has no file drag-and-drop on Wayland (only on X11), so dropping files from the file
+    // manager showed a "no" cursor. Run through XWayland when it's there; GRIDCRAFT_WAYLAND=1
+    // keeps the native Wayland backend.
+    #[cfg(all(unix, not(target_os = "macos")))]
+    if std::env::var_os("DISPLAY").is_some_and(|d| !d.is_empty()) && std::env::var_os("GRIDCRAFT_WAYLAND").is_none() {
+        options.event_loop_builder = Some(Box::new(|b| {
+            use winit::platform::x11::EventLoopBuilderExtX11;
+            b.with_x11();
+        }));
+    }
     // Before eframe creates the wgpu instance: Windows starts on DirectX 12, or OpenGL when
     // DirectX 12 has no GPU driver, and never touches Vulkan unless asked (see graphics.rs).
     #[cfg(target_os = "windows")]
@@ -391,13 +432,15 @@ fn main() -> eframe::Result<()> {
                 };
                 SheetApp::setup_context_for_language(&cc.egui_ctx, app.ui.dark, app.ui.language);
                 if let Some(port) = control_port {
-                    match control_server::start(port, cc.egui_ctx.clone()) {
+                    match control_server::start(port, control_token.clone(), cc.egui_ctx.clone()) {
                         Ok(rx) => app.control_rx = Some(rx),
                         Err(e) => log::error!("control channel on port {port}: {e}"),
                     }
                 }
+                let windows = DocWindows::new(&mut app, window_builder.clone(), DocWindows::platform_quits_with_last_window());
                 Ok(Box::new(App(
                     app,
+                    windows,
                     #[cfg(target_os = "macos")]
                     None,
                     #[cfg(target_os = "macos")]
@@ -433,10 +476,33 @@ mod region_tests {
 
     #[test]
     fn region_override_preserves_other_startup_arguments() {
-        let (remaining, region) = region_args(&args(&["--control", "7979", "--region", "it-IT", "--sample", "sales", "book.xlsx"])).unwrap();
-        assert_eq!(remaining, args(&["--control", "7979", "--sample", "sales", "book.xlsx"]));
+        let (remaining, region) = region_args(&args(&[
+            "--control",
+            "7979",
+            "--control-token",
+            "fictional-test-token",
+            "--region",
+            "it-IT",
+            "--sample",
+            "sales",
+            "book.xlsx",
+        ]))
+        .unwrap();
+        assert_eq!(remaining, args(&["--control", "7979", "--control-token", "fictional-test-token", "--sample", "sales", "book.xlsx"]));
         assert_eq!(region.as_deref(), Some("it-IT"));
         assert_eq!(region_args(&args(&["book.xlsx"])).unwrap(), (args(&["book.xlsx"]), None));
+    }
+
+    /// Keep region-looking payloads of existing native options intact while parsing the override.
+    #[test]
+    fn region_override_preserves_other_option_values() {
+        for option in ["--control", "--control-token", "--sample"] {
+            for payload in ["--region=it-IT", "--region"] {
+                let (remaining, region) = region_args(&args(&[option, payload, "--region", "en-GB", "book.xlsx"])).unwrap();
+                assert_eq!(remaining, args(&[option, payload, "book.xlsx"]));
+                assert_eq!(region.as_deref(), Some("en-GB"));
+            }
+        }
     }
 
     #[test]
