@@ -1,6 +1,6 @@
 # Localization parity
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-26 · **Change:** minor (regional DATEVALUE/TIMEVALUE and runtime configuration aligned with shared workbook windows; missing translations are listed by `cargo xtask i18n-report` and never fail a check) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-27 · **Change:** minor (regional DATEVALUE/TIMEVALUE and runtime configuration aligned with shared workbook windows; missing translations are listed by `cargo xtask i18n-report` and never fail a check) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
 
 Per-language status against Excel, which ships its UI in dozens of languages (Windows language
 packs cover 100+), with localized function names, argument separators, number and date formats,
@@ -45,7 +45,9 @@ right-to-left sheets and full complex-script support. Part of
   `Workbook.region` / `parse_input_in` parser from #1524 and `region-typed-input`.
   The `--region TAG` native/CLI flag applies before the first calculation; `app.region`
   changes it in open documents, recalculating dependents while preserving dirty state
-  and undo history. MDY, DMY, YMD and regional month/AM-PM names are covered. The
+  and undo history. Native launch overrides do not overwrite saved preferences; explicit
+  `app.region` choices persist. Group rollback keeps the active region, save point and history,
+  including nested groups and saves performed inside them. MDY, DMY, YMD and regional month/AM-PM names are covered. The
   default is en-US, independent of UI language; the preference is not stored in XLSX.
   This bridge does not enable regional cell display, localized formula names/separators,
   or regional programmatic input. Those remain separate work in the regional stack;
@@ -119,6 +121,7 @@ language (none so far) and of localized function names.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-27 | minor | Keep native region overrides transient; preserve active Region, clean/dirty save points and undo/redo during grouped rollback; align CLI checking with main's split modules and document regional contracts |
 | 2026-10-26 | minor | Preserve session Region across shared workbook windows and current-main startup while retaining the inherited regional parser and separate implicit-date follow-up |
 | 2026-10-25 | minor | Reconcile the regional preference with the status-bar settings and retain pre-open interpretation, runtime recalculation and CSV text-only import on current main |
 | 2026-10-23 | minor | Missing translations are reported, never a failure: `cargo xtask i18n-report` prints, per language, the strings other catalogs translate and it lacks (plus Spanish function help rows keyed by English the function catalog no longer has) and always passes; `cargo xtask ci` runs it first. Coverage and per-language parity tests and tests of one language's exact wording are gone; UI tests take the expected text from the catalog. Duplicate-key, placeholder, context-prefix and line-shape checks stay |

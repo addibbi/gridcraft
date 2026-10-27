@@ -246,6 +246,7 @@ fn parsed_text(a: &[Arg], c: &mut dyn Ctx) -> R<(f64, &'static str)> {
     }
 }
 
+/// Return the whole-day serial of regional date text, rejecting time-only input.
 fn datevalue(a: &[Arg], c: &mut dyn Ctx) -> R<Value> {
     let (n, f) = parsed_text(a, c)?;
     if !f.contains(['d', 'y']) {
@@ -254,6 +255,7 @@ fn datevalue(a: &[Arg], c: &mut dyn Ctx) -> R<Value> {
     num_val(n.floor())
 }
 
+/// Return the fractional-day serial of regional time text, discarding any date component.
 fn timevalue(a: &[Arg], c: &mut dyn Ctx) -> R<Value> {
     let (n, _) = parsed_text(a, c)?;
     num_val(n - n.floor())
@@ -857,6 +859,7 @@ mod tests {
     }
 
     #[test]
+    /// Read DATEVALUE text in the context region while preserving canonical numeric coercion.
     fn datevalue_uses_the_context_region() {
         let spec = crate::lookup("DATEVALUE").unwrap();
         let mut ctx = TestCtx { region: gridcraft_core::region::find("en-GB").unwrap(), ..TestCtx::default() };
@@ -878,6 +881,7 @@ mod tests {
     }
 
     #[test]
+    /// Apply regional date order under both 1900 and 1904 workbook calendars.
     fn regional_datevalue_and_timevalue_respect_the_date_system() {
         let date = crate::lookup("DATEVALUE").unwrap();
         let time = crate::lookup("TIMEVALUE").unwrap();
@@ -902,6 +906,7 @@ mod tests {
     }
 
     #[test]
+    /// Use the shared parser for localized months and YMD text in both date-text functions.
     fn date_text_functions_share_regional_names_and_year_first_order() {
         let date = crate::lookup("DATEVALUE").unwrap();
         let time = crate::lookup("TIMEVALUE").unwrap();
@@ -921,6 +926,7 @@ mod tests {
     }
 
     #[test]
+    /// Keep implicit date arguments and numeric text canonical outside DATEVALUE and TIMEVALUE.
     fn regional_date_text_does_not_change_other_functions_text_coercion() {
         let mut ctx = TestCtx { region: gridcraft_core::region::find("it-IT").unwrap(), ..TestCtx::default() };
         let date = crate::lookup("DATEVALUE").unwrap();

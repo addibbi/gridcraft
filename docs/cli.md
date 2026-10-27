@@ -48,8 +48,9 @@ gridcraft-cli check book.xlsx --region it-IT --json
 gridcraft --region it-IT book.xlsx
 ```
 
-The native flag overrides the saved region preference before sample, blank or file workbooks
-are created. The CLI always starts with explicit flags or en-US. `check` applies the region
+The native flag overrides the saved region for this launch before sample, blank or file workbooks
+are created. It does not overwrite the saved preference on exit. A deliberate `app.region`
+change replaces the launch override and becomes the saved choice. The CLI always starts with explicit flags or en-US. `check` applies the region
 to both its oracle recalculation and the workbook read back for round-trip comparison.
 Region is an application preference and is not serialized into XLSX. Formula names and
 programmatic cell/range input keep their existing canonical en-US syntax.

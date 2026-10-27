@@ -299,3 +299,194 @@ fn region_changes_and_undo_redo_share_one_workbook_between_windows() {
         }
     }
 }
+
+/// Verify that a rolled-back document uses the active region for both the formula and its dependent.
+fn assert_italian_group_state(s: &Session, dirty: bool, undo: usize, redo: usize) {
+    let d = s.doc().unwrap();
+    assert_eq!(s.region().tag, "it-IT");
+    assert_eq!(d.wb.region.tag, "it-IT");
+    assert_eq!(value(s, "A1"), Value::Number(46024.0));
+    assert_eq!(value(s, "A2"), Value::Number(2.0));
+    assert_eq!(d.is_dirty(), dirty);
+    assert_eq!((d.undo.len(), d.redo.len()), (undo, redo));
+}
+
+/// A runtime-only region change preserves clean or dirty content and creates no undo step.
+#[test]
+fn region_only_groups_preserve_saved_state_and_history() {
+    for dirty in [false, true] {
+        for rollback in [false, true] {
+            let mut s = clean_workbook();
+            if dirty {
+                s.execute("cell.set", json!({"cell":"B1","input":5})).unwrap();
+            }
+            let token = s.group_begin("Region only").unwrap();
+            s.execute("app.region", json!({"region":"it-IT"})).unwrap();
+            if rollback {
+                s.group_rollback(token).unwrap();
+            } else {
+                assert!(!s.group_end(token).unwrap());
+            }
+            assert_italian_group_state(&s, dirty, usize::from(dirty), 0);
+        }
+    }
+}
+
+/// Failed grouped edits restore a clean snapshot under the new region and retain pre-existing redo.
+#[test]
+fn region_group_rollback_restores_clean_snapshot_and_redo() {
+    let mut s = clean_workbook();
+    s.execute("cell.set", json!({"cell":"B1","input":5})).unwrap();
+    s.execute("edit.undo", json!({})).unwrap();
+    s.execute("selection.set", json!({"range":"D4"})).unwrap();
+    let token = s.group_begin("Discarded edit").unwrap();
+    s.execute("cell.set", json!({"cell":"C1","input":9})).unwrap();
+    s.execute("selection.set", json!({"range":"F8"})).unwrap();
+    s.execute("app.region", json!({"region":"it-IT"})).unwrap();
+    s.group_rollback(token).unwrap();
+    assert_eq!(value(&s, "C1"), Value::Empty);
+    assert_eq!(s.doc().unwrap().selection.a1(), "D4");
+    assert_italian_group_state(&s, false, 0, 1);
+    s.execute("edit.redo", json!({})).unwrap();
+    assert_eq!(value(&s, "B1"), Value::Number(5.0));
+    assert_italian_group_state(&s, true, 1, 0);
+    s.execute("edit.undo", json!({})).unwrap();
+    assert_italian_group_state(&s, false, 0, 1);
+}
+
+/// Rolling back a group on an already edited workbook keeps its edit and original save point.
+#[test]
+fn region_group_rollback_preserves_dirty_history_and_undo_save_point() {
+    let mut s = clean_workbook();
+    s.execute("cell.set", json!({"cell":"B1","input":5})).unwrap();
+    let token = s.group_begin("Discarded later edit").unwrap();
+    s.execute("cell.set", json!({"cell":"C1","input":9})).unwrap();
+    s.execute("app.region", json!({"region":"it-IT"})).unwrap();
+    s.group_rollback(token).unwrap();
+    assert_eq!(value(&s, "B1"), Value::Number(5.0));
+    assert_eq!(value(&s, "C1"), Value::Empty);
+    assert_italian_group_state(&s, true, 1, 0);
+    s.execute("edit.undo", json!({})).unwrap();
+    assert_italian_group_state(&s, false, 0, 1);
+    s.execute("edit.redo", json!({})).unwrap();
+    assert_italian_group_state(&s, true, 1, 0);
+}
+
+/// Nested rollback keeps the outer group's snapshot identity and avoids a spurious outer undo step.
+#[test]
+fn nested_region_group_rollback_keeps_outer_group_clean() {
+    let mut s = clean_workbook();
+    let outer = s.group_begin("Outer").unwrap();
+    let inner = s.group_begin("Inner").unwrap();
+    s.execute("cell.set", json!({"cell":"B1","input":5})).unwrap();
+    s.execute("app.region", json!({"region":"it-IT"})).unwrap();
+    s.group_rollback(inner).unwrap();
+    assert_italian_group_state(&s, false, 0, 0);
+    assert!(!s.group_end(outer).unwrap());
+    assert_italian_group_state(&s, false, 0, 0);
+}
+
+/// Region changes keep completed group edits undoable as one step without undoing application options.
+#[test]
+fn committed_region_group_undo_redo_preserves_save_point() {
+    let mut s = clean_workbook();
+    let token = s.group_begin("Two edits").unwrap();
+    s.execute("app.region", json!({"region":"it-IT"})).unwrap();
+    s.execute("cell.set", json!({"cell":"B1","input":5})).unwrap();
+    s.execute("cell.set", json!({"cell":"C1","input":9})).unwrap();
+    assert!(s.group_end(token).unwrap());
+    assert_italian_group_state(&s, true, 1, 0);
+    s.execute("edit.undo", json!({})).unwrap();
+    assert_eq!(value(&s, "B1"), Value::Empty);
+    assert_eq!(value(&s, "C1"), Value::Empty);
+    assert_italian_group_state(&s, false, 0, 1);
+    s.execute("edit.redo", json!({})).unwrap();
+    assert_eq!(value(&s, "B1"), Value::Number(5.0));
+    assert_eq!(value(&s, "C1"), Value::Number(9.0));
+    assert_italian_group_state(&s, true, 1, 0);
+}
+
+/// A real save inside a group remains the save point after rollback; reverting saved edits is dirty.
+#[test]
+fn region_group_rollback_retains_a_save_performed_inside_the_group() {
+    let path = std::env::temp_dir().join(format!("gridcraft-region-group-save-{}.xlsx", std::process::id()));
+    assert!(!path.exists(), "synthetic test path must be unused");
+    let mut s = clean_workbook();
+    s.execute("file.save", json!({"path":path})).unwrap();
+    let token = s.group_begin("Saved then rolled back").unwrap();
+    s.execute("cell.set", json!({"cell":"B1","input":5})).unwrap();
+    s.execute("app.region", json!({"region":"it-IT"})).unwrap();
+    s.execute("file.save", json!({"path":path})).unwrap();
+    assert!(!s.doc().unwrap().is_dirty());
+    s.group_rollback(token).unwrap();
+    assert_eq!(value(&s, "B1"), Value::Empty);
+    assert_italian_group_state(&s, true, 0, 0);
+    let mut reopened = Session::new();
+    reopened.set_region("it-IT").unwrap();
+    reopened.execute("file.open", json!({"path":path})).unwrap();
+    assert_eq!(value(&reopened, "B1"), Value::Number(5.0), "rollback must not change the saved file");
+    s.execute("file.save", json!({"path":path})).unwrap();
+    assert_italian_group_state(&s, false, 0, 0);
+    std::fs::remove_file(path).unwrap();
+}
+
+/// The grouped error path rolls back edits while preserving a deliberately changed application region.
+#[test]
+fn failed_grouped_action_keeps_region_and_restores_clean_content() {
+    let mut s = clean_workbook();
+    let error = s.grouped("Failed action", |s| {
+        s.execute("cell.set", json!({"cell":"B1","input":5}))?;
+        s.execute("app.region", json!({"region":"it-IT"}))?;
+        s.execute("cell.set", json!({"cell":"invalid-cell","input":9}))
+    });
+    assert!(error.is_err());
+    assert_eq!(value(&s, "B1"), Value::Empty);
+    assert_italian_group_state(&s, false, 0, 0);
+}
+
+/// A stored region-only script is not a content edit, even inside an undoable outer command.
+#[test]
+fn region_only_script_preserves_clean_state_without_an_undo_step() {
+    let mut source = clean_workbook();
+    source
+        .execute(
+            "automate.newScript",
+            json!({"name":"Italian dates", "commands":[
+                {"command":"app.region","params":{"region":"it-IT"}}
+            ]}),
+        )
+        .unwrap();
+    let bytes = source.execute("file.saveBytes", json!({"format":"xlsx"})).unwrap();
+    let mut s = Session::new();
+    s.execute("file.open", json!({"name":"fictional-region-script.xlsx","base64":bytes["base64"]})).unwrap();
+    assert!(s.execute("automate.runScript", json!({"name":"Italian dates"})).is_err(), "imported scripts still require explicit trust");
+    s.execute("automate.runScript", json!({"name":"Italian dates","trusted":true})).unwrap();
+    assert_italian_group_state(&s, false, 0, 0);
+    assert!(s.execute("edit.undo", json!({})).is_err(), "a region-only script must not manufacture an Undo entry");
+    assert_italian_group_state(&s, false, 0, 0);
+}
+
+/// A script combining a regional option and a real edit preserves genuine content history.
+#[test]
+fn regional_script_with_content_edits_keeps_undo_and_save_point() {
+    for region_first in [false, true] {
+        let mut source = clean_workbook();
+        let mut steps =
+            vec![json!({"command":"app.region","params":{"region":"it-IT"}}), json!({"command":"cell.set","params":{"cell":"B1","input":5}})];
+        if !region_first {
+            steps.reverse();
+        }
+        source.execute("automate.newScript", json!({"name":"Regional edit", "commands":steps})).unwrap();
+        let bytes = source.execute("file.saveBytes", json!({"format":"xlsx"})).unwrap();
+        let mut s = Session::new();
+        s.execute("file.open", json!({"name":"fictional-region-edit.xlsx","base64":bytes["base64"]})).unwrap();
+        s.execute("automate.runScript", json!({"name":"Regional edit","trusted":true})).unwrap();
+        assert_eq!(value(&s, "B1"), Value::Number(5.0));
+        // Ordinary script history retains the existing command grouping behavior.
+        s.execute("edit.undo", json!({"steps":s.doc().unwrap().undo.len()})).unwrap();
+        assert_eq!(value(&s, "B1"), Value::Empty);
+        assert!(!s.doc().unwrap().is_dirty());
+        assert_eq!(s.doc().unwrap().wb.region.tag, "it-IT");
+        assert_eq!(value(&s, "A1"), Value::Number(46024.0));
+    }
+}

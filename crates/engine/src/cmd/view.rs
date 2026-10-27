@@ -6,6 +6,7 @@ use serde_json::{Value as Json, json};
 
 use super::*;
 
+/// Register view, application-region and page-layout commands with their undo and query behavior.
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         cmd!(

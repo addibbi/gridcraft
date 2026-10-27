@@ -296,6 +296,7 @@ pub(crate) mod testutil {
         pub region: &'static Region,
     }
     impl Default for TestCtx {
+        /// Create a deterministic test context with the 1900 calendar and canonical region.
         fn default() -> Self {
             TestCtx { state: 0x2545_F491_4F6C_DD1D, sys: DateSystem::D1900, region: gridcraft_core::region::default_region() }
         }
@@ -304,6 +305,7 @@ pub(crate) mod testutil {
         fn date_system(&self) -> DateSystem {
             self.sys
         }
+        /// Return the region selected by the test without changing other coercion behavior.
         fn region(&self) -> &Region {
             self.region
         }
