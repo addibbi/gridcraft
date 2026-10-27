@@ -1,6 +1,6 @@
 # Roadmap detail
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-26 · **Change:** minor (reject blank PivotTable source replacements and preserve source and history; tests run through cargo xtask test) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-27 · **Change:** minor (reject blank PivotTable source replacements and preserve source and history; tests run through cargo xtask test) · **Target:** Microsoft Excel (Microsoft 365)
 
 Forward-looking plan. The one-page summary is [`ROADMAP.md`](../ROADMAP.md); the ranked work
 list is [`gaps.md`](gaps.md); numbers and method are in
@@ -123,6 +123,7 @@ to check our files, and Windows machines with the reported GPU drivers.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-27 | minor | Align PivotTable source repair with the upstream command modules; retain validation, protection and atomic undo/redo |
 | 2026-10-24 | minor | Reject blank PivotTable source replacements and cover source and undo/redo preservation with a valid active selection |
 | 2026-10-24 | minor | Align PivotTable source repair with current main and the consolidated engine integration-test binary |
 | 2026-10-23 | minor | Measuring: tests run through `cargo xtask test` |

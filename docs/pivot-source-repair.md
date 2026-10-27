@@ -1,6 +1,6 @@
 # Repairing an invalid PivotTable source
 
-> **Last updated:** 2026-10-26
+> **Last updated:** 2026-10-27
 
 An existing PivotTable can outlive its source's validity: an unused column header may be
 deleted, or its defined source name may disappear. Refresh must reject that invalid source,
@@ -66,7 +66,7 @@ the workbook or history, blank replacement rejection for both parameter names wi
 active selection and an existing redo branch, protection and occupied report cells, undo/redo,
 and repeated XLSX save/open/refresh. This repair is independent of date parsing and GETPIVOTDATA support.
 
-The branch is aligned with upstream `main` at `f6b0cec6`. The six regressions
+The branch is aligned with upstream `main` at `45f5ab18`. The six regressions
 run in the consolidated engine integration-test binary, without changing the repair
 contract. The desktop-theme compatibility fix is already supplied by upstream.
 
@@ -78,6 +78,7 @@ constructed, which failures must preserve history, and what each regression veri
 
 | Date | Change |
 |---|---|
+| 2026-10-27 | Adapt source repair to the upstream pivot command modules; preserve explicit-source validation and atomic edits |
 | 2026-10-26 | Align with current main and shared workbook windows; preserve all six repair and empty-source regressions |
 | 2026-10-24 | Reject blank source replacements without falling back to the active selection; add source and history regression coverage |
 | 2026-10-24 | Align with current main and the consolidated engine integration-test binary |
