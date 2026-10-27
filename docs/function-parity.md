@@ -1,6 +1,6 @@
 # Function parity: worksheet functions and formulas
 
-> **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-26 · **Change:** minor (preserve the unused IFERROR fallback guard alongside upstream stack-budget and circular-diagnostic hardening; the LAMBDA row lists the recursion limit and its `#NUM!`, and the error a defined name holding an error gives when called; earlier: number text with accounting parentheses coerces like Excel 365; INDEX with one index on a 2-D reference is #REF! as in Excel; earlier: SUBTOTAL and AGGREGATE cap the cells they visit, #2175) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
+> **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-27 · **Change:** minor (preserve the unused IFERROR fallback guard alongside upstream stack-budget and circular-diagnostic hardening; the LAMBDA row lists the recursion limit and its `#NUM!`, and the error a defined name holding an error gives when called; earlier: number text with accounting parentheses coerces like Excel 365; INDEX with one index on a 2-D reference is #REF! as in Excel; earlier: SUBTOTAL and AGGREGATE cap the cells they visit, #2175) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
 
 Excel's worksheet functions, category by category, against GridCraft's function library. Part of
 [target-app-parity.md](target-app-parity.md); gaps feed [gaps.md](gaps.md).
@@ -33,7 +33,6 @@ Excel's worksheet functions, category by category, against GridCraft's function 
 
 | Category | Excel | Ours | Working | % working | Missing |
 |---|---|---|---|---|---|
-| 2026-10-26 | minor | Align the IFERROR follow-up with main at `f6b0cec`; preserve the unused-fallback guard, primary SUMPRODUCT regression and streamed/materialized suspension-count controls |
 | Statistical | 111 | 111 | 111 | 100% | — |
 | Math and trigonometry | 80 | 79 | 79 | 99% | PERCENTOF |
 | Financial | 55 | 55 | 55 | 100% | — |
@@ -65,7 +64,6 @@ This improves series preparation; it does not change the model-fitting or season
 
 | Function(s) | In scope? | Estimate | Note |
 |---|---|---|---|
-| 2026-10-26 | minor | Align the IFERROR follow-up with main at `f6b0cec`; preserve the unused-fallback guard, primary SUMPRODUCT regression and streamed/materialized suspension-count controls |
 | FORECAST.ETS family (4) | yes | 4–6 h | AAA exponential smoothing with seasonality detection; needed for Forecast Sheet too |
 | ODDFPRICE, ODDFYIELD, ODDLPRICE, ODDLYIELD | yes | 2–4 h | Odd first/last period bond maths |
 | GETPIVOTDATA | yes | 2–3 h | Needs the pivot engine's result cache; also the "Generate GetPivotData" option |
@@ -130,6 +128,7 @@ workbooks; results checked in as data, not Excel files) and fixing what it finds
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-27 | minor | Move the suspended-range guard into the upstream pass-host module and remove misplaced revision rows from Coverage and Scope; retain synthetic IFERROR and SUMPRODUCT controls |
 | 2026-10-26 | minor | Align the IFERROR follow-up with main at `f6b0cec`; preserve the unused-fallback guard, primary SUMPRODUCT regression and streamed/materialized suspension-count controls |
 | 2026-10-25 | minor | Add a generated primary SUMPRODUCT regression at the nesting limit, checking calculated values and absence of circular diagnostics |
 | 2026-10-25 | minor | Align the IFERROR follow-up with main at `17b9f6f`, retaining upstream stack-budget handling and circular diagnostics alongside the range batching guard and generated regressions |
