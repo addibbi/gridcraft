@@ -1,6 +1,6 @@
 # Gaps
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-26 · **Change:** minor (§8: refreshed file pivots keep sort, captions and layout settings alongside PivotTable Enable show details; earlier: PivotTable Show Details) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-27 · **Change:** trivial (align the #722-based follow-up with main and its pivot module split; no behavior or score change) · **Target:** Microsoft Excel (Microsoft 365)
 
 Every known shortfall against Excel, one entry each, ranked by user impact (what blocks someone
 using GridCraft for real work first). This is the work list: pick from the top, check the open
@@ -184,6 +184,7 @@ No alpha blockers: every core workflow passes the [alpha gate](roadmap.md#alpha-
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-27 | trivial | Align the #722-based follow-up with main 45f5ab18 and its pivot module split; preserve source-order reset, regrouping cleanup, cache-reference deduplication and Show Details protections |
 | 2026-10-26 | trivial | Realign the #722-based manual-order follow-up with main; retain source-order reset, regrouping cleanup, cache-reference deduplication and Show Details protections |
 | 2026-10-25 | trivial | Align the #722-based manual-order follow-up with main; preserve both refreshed pivot settings and the Enable show details option |
 | 2026-10-24 | minor | §8: PivotTable Enable show details: `pivot.options` `enableShowDetails` turns Show Details off for a PivotTable, read and written in XLSX as `enableDrill` |
