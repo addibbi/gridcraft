@@ -129,7 +129,8 @@ see [`mcp.md`](mcp.md) and [`cli.md`](cli.md).
 ### Region and date-text recalculation
 
 Start with `gridcraft --region it-IT --control 7979 book.xlsx` to select the region
-before the first recalculation. `app.region` queries or changes the same preference:
+before the first recalculation for this launch, without overwriting the saved preference.
+`app.region` queries the effective region or deliberately replaces it and updates the saved choice:
 
 ```json
 {"id": 2, "method": "engine.execute", "params": {"command": "app.region", "params": {"region": "it-IT"}}}
@@ -142,7 +143,9 @@ Empty params or `{"region":null}` query it. The result contains `region`, `name`
 Changing it recalculates `DATEVALUE`, `TIMEVALUE`, implicit date/time text arguments
 (such as `YEAR`, `MONTH`, `DAY` and holiday arrays) and their dependents in every open
 document. It preserves each document's clean/dirty state and is not an undoable edit;
-undo/redo retains the current session region. It does not refresh PivotTables: execute
+undo/redo and undo-group rollback retain the current session region. Region-only changes
+inside a group create no undo step. Rollback restores the original clean/dirty state unless
+a workbook save inside the group established a different save point. It does not refresh PivotTables: execute
 `data.refreshAll` separately to rebuild reports from the recalculated source formulas.
 
 This bridge uses the shared Region/parser from #1524 and `region-typed-input`. It does

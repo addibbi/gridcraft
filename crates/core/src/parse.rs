@@ -79,10 +79,12 @@ pub fn number_stored_as_text(s: &str) -> Option<f64> {
     }
 }
 
+/// Parse regional numeric text, rejecting signed or nested accounting parentheses.
 fn parse_numeric(t: &str, sys: DateSystem, r: &Region) -> Option<(f64, Option<&'static str>)> {
     parse_numeric_regions(t, sys, r, r)
 }
 
+/// Parse numeric forms using `r` and date/time text using `date_region`, without locale fallback.
 fn parse_numeric_regions(t: &str, sys: DateSystem, r: &Region, date_region: &Region) -> Option<(f64, Option<&'static str>)> {
     // Parenthesised negatives: (100) = -100, and the accounting forms `$(100)` and `(5)%`.
     if let Some(inner) = parenthesized(t) {
@@ -96,6 +98,7 @@ fn parse_numeric_regions(t: &str, sys: DateSystem, r: &Region, date_region: &Reg
     parse_unparenthesised(t, sys, r, date_region)
 }
 
+/// Try numeric forms in `r` and date/time text in `date_region` without accounting parentheses.
 fn parse_unparenthesised(t: &str, sys: DateSystem, r: &Region, date_region: &Region) -> Option<(f64, Option<&'static str>)> {
     if t.is_empty() {
         return None;
@@ -350,6 +353,7 @@ fn is_connector(w: &str, r: &Region) -> bool {
     (matches!(r.tag, "es-ES" | "pt-BR" | "pt-PT") && matches!(w.as_str(), "de" | "del")) || (r.tag == "ru-RU" && matches!(w.as_str(), "г" | "г."))
 }
 
+/// Read regional numeric or named-month dates into a workbook-system serial and canonical format.
 fn parse_date(t: &str, sys: DateSystem, r: &Region) -> Option<(f64, &'static str)> {
     let t = t.trim().trim_end_matches(',');
     let num = |s: &str| {
@@ -452,6 +456,7 @@ pub fn current_year() -> i64 {
     2026
 }
 
+/// Read regional dates, times or bounded date/time tails without quadratic prefix retries.
 fn parse_datetime(t: &str, sys: DateSystem, r: &Region) -> Option<(f64, Option<&'static str>)> {
     if let Some((tf, secs, ampm)) = parse_time(t, r) {
         let f = match (secs, ampm) {
@@ -710,11 +715,13 @@ mod tests {
         assert_eq!(parse_input("2/29/1904", DateSystem::D1904).value, Value::Number(59.0));
     }
 
+    /// Parse synthetic text in a named registry region using the 1900 date system.
     fn pin(region: &str, s: &str) -> Parsed {
         parse_input_in(s, DateSystem::D1900, crate::region::find(region).unwrap())
     }
 
     #[test]
+    /// Keep canonical parsing identical when the explicit region is en-US.
     fn en_us_is_unchanged_by_the_region_parameter() {
         for s in [
             "1,234.5",
@@ -739,6 +746,7 @@ mod tests {
     }
 
     #[test]
+    /// Interpret decimal and grouping separators according to each decimal-comma region.
     fn decimal_comma_regions_read_their_numbers() {
         let n = pin("pt-BR", "1.234,56");
         assert_eq!(n.value, Value::Number(1234.56));
@@ -757,6 +765,7 @@ mod tests {
     }
 
     #[test]
+    /// Apply regional grouping to the whole-number part of mixed fractions.
     fn mixed_fractions_read_their_whole_part_in_the_region() {
         assert_eq!(pin("de-DE", "1.000 1/2").value, Value::Number(1000.5));
         assert_eq!(pin("de-DE", "1,5 1/2").value, Value::Number(2.0));
@@ -767,6 +776,7 @@ mod tests {
     }
 
     #[test]
+    /// Accept interchangeable Unicode spacing characters in space-grouping regions.
     fn group_separators_that_are_spaces() {
         assert_eq!(pin("ru-RU", "1\u{a0}234,5").value, Value::Number(1234.5));
         assert_eq!(pin("ru-RU", "1 234,5").value, Value::Number(1234.5));
@@ -777,6 +787,7 @@ mod tests {
     }
 
     #[test]
+    /// Read Indian digit grouping without changing the represented number.
     fn indian_grouping() {
         assert_eq!(pin("en-IN", "12,34,567.89").value, Value::Number(1234567.89));
         assert_eq!(pin("en-IN", "1,234,567.89").value, Value::Number(1234567.89));
@@ -786,6 +797,7 @@ mod tests {
     }
 
     #[test]
+    /// Accept regional currency symbols while retaining canonical currency format codes.
     fn currency_follows_the_region() {
         let a = pin("pt-BR", "R$ 3,50");
         assert_eq!((a.value, a.format), (Value::Number(3.5), Some("\"R$\" #,##0.00")));
@@ -800,6 +812,7 @@ mod tests {
     }
 
     #[test]
+    /// Distinguish MDY, DMY and YMD dates, including two-digit and explicit four-digit years.
     fn dates_in_the_regions_order() {
         let d = |r: &str, s: &str| pin(r, s).value;
         assert_eq!(d("en-GB", "25/09/2026"), Value::Number(46290.0));
@@ -832,6 +845,7 @@ mod tests {
     }
 
     #[test]
+    /// Recognize localized month names and connectors in date text.
     fn month_names_in_local_words() {
         let d = |r: &str, s: &str| pin(r, s).value;
         assert_eq!(d("de-DE", "25. September 2026"), Value::Number(46290.0));
@@ -851,6 +865,7 @@ mod tests {
     }
 
     #[test]
+    /// Read regional time separators and localized AM/PM markers.
     fn times_in_the_regions_words() {
         let d = |r: &str, s: &str| pin(r, s).value;
         assert_eq!(d("de-DE", "15:30"), Value::Number(15.5 / 24.0));
@@ -869,6 +884,7 @@ mod tests {
     }
 
     #[test]
+    /// Keep malformed, oversized and non-finite input bounded and non-panicking in every registry region.
     fn hostile_input_never_panics_in_any_region() {
         let nasty = [
             "",

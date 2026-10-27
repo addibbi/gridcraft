@@ -1,6 +1,6 @@
 # Function parity: worksheet functions and formulas
 
-> **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-26 · **Change:** minor (regional implicit date arguments aligned with the updated #1886 and main's shared workbook windows; the LAMBDA row lists the recursion limit and its `#NUM!`, and the error a defined name holding an error gives when called; earlier: number text with accounting parentheses coerces like Excel 365; INDEX with one index on a 2-D reference is #REF! as in Excel; earlier: SUBTOTAL and AGGREGATE cap the cells they visit, #2175) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
+> **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-27 · **Change:** minor (regional implicit date arguments aligned with the updated #1886 and main's shared workbook windows; the LAMBDA row lists the recursion limit and its `#NUM!`, and the error a defined name holding an error gives when called; earlier: number text with accounting parentheses coerces like Excel 365; INDEX with one index on a 2-D reference is #REF! as in Excel; earlier: SUBTOTAL and AGGREGATE cap the cells they visit, #2175) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
 
 Excel's worksheet functions, category by category, against GridCraft's function library. Part of
 [target-app-parity.md](target-app-parity.md); gaps feed [gaps.md](gaps.md).
@@ -124,6 +124,7 @@ workbooks; results checked in as data, not Excel files) and fixing what it finds
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-27 | minor | Inherit #1886 transient startup Region and grouped rollback fixes on main 45f5ab18 while preserving regional implicit date arguments, numeric serial coercion and calendar-boundary regressions |
 | 2026-10-26 | minor | Align implicit regional date arguments with #1886 and current main; retain shared workbook windows, control authentication, canonical numeric coercion and ISO week regressions in both calendars |
 | 2026-10-25 | minor | Integrate regional DATEVALUE/TIMEVALUE with main's date-system and parser protections; implicit date arguments remained canonical en-US in #1886; this #2429 follow-up extends date/time text while retaining generic numeric coercion |
 | 2026-10-25 | minor | LAMBDA row: a LAMBDA that calls itself more than 140 times, and a formula nested past the depth limit, give `#NUM!` (#1809; nesting gave `#CALC!` before). `=Foo(1)` where the defined name Foo holds `#N/A` gives `#N/A`, not `#NAME?` |

@@ -1,6 +1,6 @@
 # Reproduce a missing January row with regional date text
 
-> **Last updated:** 2026-10-26
+> **Last updated:** 2026-10-27
 
 This fictional two-row workbook is generated entirely in Rust. It contains date text,
 `DATEVALUE`, a `YEAR`/`MONTH` label and amounts; a PivotTable sums amounts by month.
@@ -63,7 +63,7 @@ the workbook's 1900/1904 calendar are also covered by function regressions:
 cargo test -p gridcraft-functions --lib date::tests
 ```
 
-The branch integrates #1886 at `c17393c3` and main at `f6b0cec6`. File opening
+The branch integrates #1886 at `edf088d2` and main at `45f5ab18`. File opening
 retains `csvAsText` while setting the workbook region before recalculation, and the
 CLI keeps the full import warning list. A generated CSV regression checks that
 text-only import keeps `00123` and `13/01/2026` as text, that normal CSV import still
@@ -88,3 +88,16 @@ This change retains the Region data associated with #1524 and the original
 no separate DateOrder preference. Regional display, localized formula syntax and wider
 input/coercion changes remain separate work. The example refuses to overwrite an
 existing file; all fixture data is original and fictional.
+
+The native `--region` override lasts for this launch; serializing preferences retains the
+previous saved choice. A deliberate `app.region` change replaces the override and persists,
+even if the user selects the same tag as the override. Undo groups retain the effective
+region when rolled back, preserve clean/dirty and undo/redo identity, and respect a real
+save made while the group was open. Region-only groups do not manufacture an undo step.
+
+## Revision history
+
+| Date | Change |
+| --- | --- |
+| 2026-10-27 | Add transient native overrides and synthetic grouped rollback, nested history and save-point regressions; preserve the regional CLI oracle after main's module split and inherit these fixes in the implicit-date follow-up |
+| 2026-10-26 | Verify shared workbook windows and preserve parser bounds, regional implicit date text and canonical numeric coercion |

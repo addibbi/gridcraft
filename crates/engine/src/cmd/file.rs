@@ -31,6 +31,7 @@ pub fn specs() -> Vec<CommandSpec> {
     ]
 }
 
+/// Create a blank or sample workbook using the session region before its first calculation.
 fn new_workbook(s: &mut Session, p: &Json) -> Result<Json> {
     let i = match str_param(p, "sample") {
         Some(name) => {
@@ -44,6 +45,7 @@ fn new_workbook(s: &mut Session, p: &Json) -> Result<Json> {
     Ok(json!({"index": i, "title": s.doc()?.display_title()}))
 }
 
+/// Open a file or supplied bytes, then attach its document under the current session region.
 fn open(s: &mut Session, p: &Json) -> Result<Json> {
     let (name, bytes) = if let Some(b) = str_param(p, "base64") {
         (str_param(p, "name").unwrap_or("Book.xlsx").to_string(), crate::io::base64_decode(b).ok_or_else(|| bad("file.open", "invalid base64"))?)

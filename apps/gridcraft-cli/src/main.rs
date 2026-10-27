@@ -145,6 +145,7 @@ impl Args {
     fn opt(&self, name: &str) -> Option<&str> {
         self.opts.iter().rev().find(|(n, _)| n == name).map(|(_, v)| v.as_str())
     }
+    /// Report whether a recognized boolean switch was supplied.
     fn has(&self, name: &str) -> bool {
         self.switches.iter().any(|s| s == name)
     }
@@ -152,6 +153,7 @@ impl Args {
     fn region(&self) -> Result<Option<&'static Region>, String> {
         self.opt("region").map(|tag| gridcraft_engine::find_region(tag).map_err(|e| format!("--region: {e}"))).transpose()
     }
+    /// Read a required positional argument or return a named usage error.
     fn pos(&self, i: usize, what: &str) -> Result<&str, String> {
         self.positional.get(i).map(String::as_str).ok_or_else(|| format!("missing {what}\n{USAGE}"))
     }
@@ -165,6 +167,7 @@ impl Args {
 
 // ---------------------------------------------------------------- helpers
 
+/// Execute a command headlessly and print any file-opening warnings.
 fn exec(s: &mut Session, id: &str, params: Value) -> Result<Value, String> {
     let r = s.execute_headless(id, params).map_err(|e| e.to_string());
     if id == "file.open"
@@ -187,12 +190,14 @@ fn session(region: Option<&'static Region>) -> Session {
     s
 }
 
+/// Open a workbook after installing the command-line formula region.
 fn open(path: &str, region: Option<&'static Region>) -> Result<Session, String> {
     let mut s = session(region);
     exec(&mut s, "file.open", json!({"path": path}))?;
     Ok(s)
 }
 
+/// Create a blank workbook under the selected formula region.
 fn blank(region: Option<&'static Region>) -> Session {
     let mut s = session(region);
     s.new_workbook();
@@ -260,6 +265,7 @@ fn csv_field(s: &str, delim: char) -> String {
 
 // ---------------------------------------------------------------- subcommands
 
+/// Inspect a workbook after opening it with the selected formula region.
 fn info(args: &[String]) -> Result<(), String> {
     let a = Args::parse(args, &["region"], &["json"])?;
     let path = a.pos(0, "<file>")?;
@@ -301,6 +307,7 @@ fn info(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+/// Convert a workbook to the requested output format using the selected formula region.
 fn convert(args: &[String]) -> Result<(), String> {
     let a = Args::parse(args, &["sheet", "region"], &[])?;
     let input = a.pos(0, "<in>")?;
@@ -324,6 +331,7 @@ fn convert(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+/// Evaluate an expression in a blank or imported workbook with optional region and date system.
 fn eval(args: &[String]) -> Result<(), String> {
     let a = Args::parse(args, &["in", "sheet", "cell", "region"], &["json"])?;
     let formula = a.pos(0, "<formula>")?;
@@ -395,6 +403,7 @@ fn print_range(s: &mut Session, range: Option<&str>, sheet: Option<&str>, formul
     Ok(())
 }
 
+/// Print a selected range after opening its workbook with the selected formula region.
 fn cat(args: &[String]) -> Result<(), String> {
     let a = Args::parse(args, &["range", "sheet", "region"], &["formulas", "csv"])?;
     let path = a.pos(0, "<file>")?;
@@ -434,6 +443,7 @@ fn parse_command(text: &str) -> Result<Option<(String, Value)>, String> {
     Ok(Some((id.to_string(), params)))
 }
 
+/// Execute the requested commands and save their workbook with optional regional recalculation.
 fn run(args: &[String]) -> Result<(), String> {
     let a = Args::parse(args, &["in", "sample", "cmd", "script", "out", "print", "sheet", "region"], &["quiet", "csv", "formulas"])?;
     a.no_extra(0)?;
@@ -668,6 +678,7 @@ mod tests {
     }
 
     #[test]
+    /// Accept both region flag forms, canonicalize aliases and reject unsupported tags.
     fn region_arguments_are_explicit_and_validated() {
         let args = |values: &[&str]| values.iter().map(|value| value.to_string()).collect::<Vec<_>>();
         let parse = |values: &[&str]| Args::parse(&args(values), &["region"], &[]);
@@ -682,6 +693,7 @@ mod tests {
     }
 
     #[test]
+    /// Ensure regional date text is interpreted correctly on the first calculation.
     fn blank_session_applies_region_before_creating_the_workbook() {
         for (tag, date_text) in [("en-GB", "13/01/2026"), ("ja-JP", "26/01/13")] {
             let region = gridcraft_engine::find_region(tag).unwrap();
@@ -695,6 +707,7 @@ mod tests {
     }
 
     #[test]
+    /// Keep programmatic numeric and date entry canonical when the formula region changes.
     fn region_does_not_reinterpret_canonical_command_input() {
         let mut s = blank(Some(gridcraft_engine::find_region("it-IT").unwrap()));
         exec(&mut s, "cell.set", json!({"cell": "A1", "input": "1.234"})).unwrap();
@@ -705,6 +718,7 @@ mod tests {
     }
 
     #[test]
+    /// Preserve workbook hyperlink annotations when converting XLSX to PDF with default CLI options.
     fn convert_xlsx_to_pdf_keeps_links() {
         let dir = std::env::temp_dir().join(format!("gridcraft-cli-pdf-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();

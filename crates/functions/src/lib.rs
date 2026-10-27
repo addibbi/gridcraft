@@ -102,6 +102,7 @@ impl Arg {
 
 /// Services a function may need from the host.
 pub trait Ctx {
+    /// Select the workbook calendar used to interpret and return date serials.
     fn date_system(&self) -> DateSystem;
     /// The regional format for date/time text consumed by date functions, including implicit
     /// date serial arguments. Numeric serial text and general arithmetic retain canonical en-US coercion.

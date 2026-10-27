@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~25 points of "ready for real work" and ~160–240 h away
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-26 · **Change:** minor (regional implicit date arguments aligned with the current regional dependency and main; shared workbook windows retained; AutoSum over a selected row puts its total to the right, and fills a selection's empty last row and column) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-27 · **Change:** minor (regional implicit date arguments aligned with the current regional dependency and main; transient overrides and grouped rollback fixes retained; AutoSum over a selected row puts its total to the right, and fills a selection's empty last row and column) · **Target:** Microsoft Excel (Microsoft 365)
 
 GridCraft aims at full Microsoft Excel parity, and at being better in places: faster, open (XLSX
 is the native format), fully scriptable by agents (MCP, control channel, CLI), and on the web.
@@ -244,6 +244,7 @@ Ranked; estimates in Opus 5.5 agent-hours. Detail and the full beta-gate list in
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-27 | minor | Native regional overrides remain per-launch; grouped rollback preserves effective Region and real save points without creating undo steps for application options ; implicit date arguments retain regional text parsing and canonical numeric serial coercion |
 | 2026-10-26 | minor | Align regional implicit date arguments with the updated #1886 and main; preserve canonical numeric coercion, both calendar epochs and shared workbook windows |
 | 2026-10-25 | minor | Progress log: AutoSum over a selected row, and a selection's empty last row and column |
 | 2026-10-24 | minor | Regional text in implicit date arguments; synthetic regressions preserve numeric coercion and both workbook calendars |

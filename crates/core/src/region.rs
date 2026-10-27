@@ -620,6 +620,7 @@ impl Region {
     }
 }
 
+/// Recognize the spacing characters accepted as interchangeable grouping separators.
 fn is_space_like(c: char) -> bool {
     matches!(c, ' ' | '\u{a0}' | '\u{202f}' | '\u{2009}')
 }
@@ -629,6 +630,7 @@ mod tests {
     use super::*;
 
     #[test]
+    /// Normalize system and browser locale tags and preserve documented language fallbacks.
     fn lookup_accepts_system_and_browser_tags() {
         assert_eq!(lookup("pt-BR").tag, "pt-BR");
         assert_eq!(lookup("pt_BR.UTF-8").tag, "pt-BR");
@@ -658,6 +660,7 @@ mod tests {
     }
 
     #[test]
+    /// Validate unique region identifiers and complete month, weekday and format tables.
     fn every_region_is_consistent() {
         let mut tags = std::collections::HashSet::new();
         for r in all() {
@@ -671,6 +674,7 @@ mod tests {
     }
 
     #[test]
+    /// Match full, abbreviated and grammatical month forms without accepting unrelated names.
     fn month_names_match_loosely() {
         let de = find("de-DE").unwrap();
         assert_eq!(de.month_from_name("März"), Some(3));
@@ -694,6 +698,7 @@ mod tests {
     }
 
     #[test]
+    /// Treat supported Unicode spaces as equivalent only for space-grouping regions.
     fn space_like_groups_are_interchangeable() {
         let fr = find("fr-FR").unwrap();
         assert!(fr.is_group('\u{a0}') && fr.is_group(' ') && fr.is_group('\u{202f}'));
