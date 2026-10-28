@@ -152,6 +152,10 @@ This bridge uses the shared Region/parser from #1524 and `region-typed-input`. I
 not enable regional display or change programmatic `cell.set`/`range.setValues` input,
 which remains canonical en-US. Numeric serial text in date/time functions also retains
 canonical en-US coercion; only its date/time interpretation follows the region.
+General `VALUE` and arithmetic remain en-US as well. This leaves a documented
+[coercion gap](date-order-repro.md#known-coercion-boundary-and-whitespace) for ambiguous
+date strings passed indirectly through those operations. Implicit date arguments reject
+surrounding whitespace on date/time text while preserving numeric serial text rules.
 The default region is en-US, independent of UI language.
 
 ### Native printing

@@ -1,6 +1,6 @@
 # Localization parity
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-27 · **Change:** minor (regional implicit date arguments aligned with the updated #1886, transient overrides and grouped rollback; missing translations are listed by `cargo xtask i18n-report` and never fail a check) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-28 · **Change:** minor (regional implicit date arguments aligned with the updated #1886, transient overrides and grouped rollback; missing translations are listed by `cargo xtask i18n-report` and never fail a check) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
 
 Per-language status against Excel, which ships its UI in dozens of languages (Windows language
 packs cover 100+), with localized function names, argument separators, number and date formats,
@@ -55,6 +55,10 @@ right-to-left sheets and full complex-script support. Part of
   This bridge does not enable regional cell display, localized formula names/separators,
   or regional programmatic input. Those remain separate work in the regional stack;
   API input and generic numeric text coercion retain their canonical en-US contracts.
+  Consequently, `MONTH("02/01/2026")` and `MONTH(VALUE("02/01/2026"))` differ under it-IT;
+  this is a [known compatibility gap](date-order-repro.md#known-coercion-boundary-and-whitespace),
+  not a claim of full regional Excel parity. Implicit date arguments reject padded date/time
+  strings while retaining numeric serial text's existing whitespace rules.
 - **Script support.** System-font fallback for CJK, Thai and Hebrew landed in #38 (closes #32;
   #142 is still open pending confirmation). Native CJK fallback also probes Flatpak's read-only
   `/run/host/fonts`, `/run/host/local-fonts` and `/run/host/user-fonts` layouts, so installed
@@ -124,6 +128,7 @@ language (none so far) and of localized function names.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-28 | minor | Reject padded implicit date/time arguments; document the known regional VALUE/arithmetic coercion gap with synthetic regressions and distinguish measured en-US Excel behavior from day-first inference |
 | 2026-10-27 | minor | Keep native region overrides transient; preserve active Region, clean/dirty save points and undo/redo during grouped rollback; align CLI checking with main's split modules and document regional contracts ; implicit date arguments retain regional text parsing and canonical numeric serial coercion |
 | 2026-10-26 | minor | Preserve session Region across shared workbook windows and current-main startup while retaining the inherited regional parser and regional implicit date arguments |
 | 2026-10-25 | minor | Reconcile the regional preference with the status-bar settings and retain pre-open interpretation, runtime recalculation and CSV text-only import on current main |

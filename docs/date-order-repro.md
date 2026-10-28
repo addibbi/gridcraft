@@ -1,6 +1,6 @@
 # Reproduce a missing January row with regional date text
 
-> **Last updated:** 2026-10-27
+> **Last updated:** 2026-10-28
 
 This fictional two-row workbook is generated entirely in Rust. It contains date text,
 `DATEVALUE`, a `YEAR`/`MONTH` label and amounts; a PivotTable sums amounts by month.
@@ -63,6 +63,38 @@ the workbook's 1900/1904 calendar are also covered by function regressions:
 cargo test -p gridcraft-functions --lib date::tests
 ```
 
+## Known coercion boundary and whitespace
+
+This follow-up does not make all formula text coercion regional. The generated
+`regional_dates_expose_canonical_value_and_arithmetic_boundary` regression records this
+remaining compatibility gap explicitly, rather than treating it as Excel parity:
+
+| Formula | en-US | it-IT |
+|---|---:|---:|
+| `MONTH("02/01/2026")` | 2 | 1 |
+| `VALUE("02/01/2026")` | 46054 | 46054 |
+| `"02/01/2026"+0` | 46054 | 46054 |
+| `MONTH(VALUE("02/01/2026"))` | 2 | 2 |
+
+The table uses the 1900 calendar. In it-IT, the direct date argument means 2 January,
+but passing through `VALUE` or arithmetic still produces the en-US serial for 1 February.
+Numeric serial text such as `"45000"` remains consistent through all three paths.
+
+A [reviewer's Excel desktop COM report](https://github.com/storytold/gridcraft/pull/2429#issuecomment-6459063104)
+measured matching date-function, `VALUE` and arithmetic interpretations in en-US. Its
+expectation that they also agree in a day-first Region is explicitly an inference: that
+Region was not measured. Aligning generic formula coercion needs a separate, measured
+contract across calculation operators and function arguments. This PR preserves that
+existing contract and exposes its limitation; it does not claim to resolve the gap.
+
+The same report measured `DAY("   01/02/2026  ")` as `#VALUE!`. Implicit date arguments
+now reject surrounding whitespace on date/time text, including referenced dates and
+holiday arrays. Numeric serial text retains its existing padding and number syntax rules:
+`HOUR(" 45000.5 ")` stays 12. Core/function regressions cover both calendars and regions,
+and a generated XLSX round trip preserves the original padded text and its error.
+Typed cell input and the separate `DATEVALUE`/`TIMEVALUE` paths retain their existing
+whitespace behavior; this fix is scoped to implicit date arguments.
+
 The branch integrates #1886 at `edf088d2` and main at `45f5ab18`. File opening
 retains `csvAsText` while setting the workbook region before recalculation, and the
 CLI keeps the full import warning list. A generated CSV regression checks that
@@ -99,5 +131,6 @@ save made while the group was open. Region-only groups do not manufacture an und
 
 | Date | Change |
 | --- | --- |
+| 2026-10-28 | Reject padded implicit date text without changing numeric serial coercion; document and test the remaining VALUE/arithmetic regional boundary and the limits of reported Excel observations |
 | 2026-10-27 | Add transient native overrides and synthetic grouped rollback, nested history and save-point regressions; preserve the regional CLI oracle after main's module split and inherit these fixes in the implicit-date follow-up |
 | 2026-10-26 | Verify shared workbook windows and preserve parser bounds, regional implicit date text and canonical numeric coercion |

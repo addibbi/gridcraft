@@ -1017,6 +1017,36 @@ mod tests {
         close(crate::call(crate::lookup("MONTH").unwrap(), &[t("02/01/2026")], &mut ctx), 1.0);
     }
 
+    /// Reject padded date arguments and holidays while retaining the numeric-serial text contract.
+    #[test]
+    fn regional_date_arguments_reject_padded_dates_and_holidays() {
+        for sys in [gridcraft_core::DateSystem::D1900, gridcraft_core::DateSystem::D1904] {
+            for tag in ["en-US", "it-IT"] {
+                let mut ctx = TestCtx { sys, region: gridcraft_core::region::find(tag).unwrap(), ..TestCtx::default() };
+                for input in [" 01/02/2026", "01/02/2026 ", "   01/02/2026  "] {
+                    for name in ["DAY", "MONTH", "YEAR", "WEEKDAY", "ISOWEEKNUM"] {
+                        is_err(crate::call(crate::lookup(name).unwrap(), &[t(input)], &mut ctx), CellError::Value);
+                    }
+                    is_err(crate::call(crate::lookup("DAYS").unwrap(), &[t(input), t("01/01/2026")], &mut ctx), CellError::Value);
+                    let holiday = crate::Arg::reference(Value::Array(gridcraft_core::Array::new(1, 1, vec![Value::text(input)]).unwrap().into()));
+                    is_err(
+                        crate::call(
+                            crate::lookup("NETWORKDAYS").unwrap(),
+                            &[
+                                n(gridcraft_core::date::serial_from_ymd(sys, 2026, 1, 1).unwrap()),
+                                n(gridcraft_core::date::serial_from_ymd(sys, 2026, 1, 31).unwrap()),
+                                holiday,
+                            ],
+                            &mut ctx,
+                        ),
+                        CellError::Value,
+                    );
+                }
+                close(crate::call(crate::lookup("HOUR").unwrap(), &[t(" 45000.5 ")], &mut ctx), 12.0);
+            }
+        }
+    }
+
     /// Date ranges and holiday arrays share regional date coercion, including the 1904 epoch.
     #[test]
     fn regional_date_ranges_and_holidays_use_the_same_calendar() {

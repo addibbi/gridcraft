@@ -62,8 +62,10 @@ pub fn parse_number_text_in(s: &str, sys: DateSystem) -> Option<f64> {
 
 /// Text consumed by a date-serial argument: numeric serials retain canonical en-US coercion,
 /// while date/time text uses the workbook's region. Invalid regional dates never fall back to MDY.
+/// Surrounding whitespace is accepted for numeric forms, but not for date/time strings.
 pub fn parse_date_argument_text_in(s: &str, sys: DateSystem, region: &Region) -> Option<f64> {
-    parse_numeric_regions(s.trim(), sys, &EN_US, region).map(|(n, _)| n)
+    let trimmed = s.trim();
+    parse_numeric_forms(trimmed, &EN_US).or_else(|| if trimmed == s { parse_datetime(s, sys, region) } else { None }).map(|(n, _)| n)
 }
 
 /// Text that Excel's "Number Stored as Text" check flags: it would be a number if typed (signs,
@@ -86,6 +88,11 @@ fn parse_numeric(t: &str, sys: DateSystem, r: &Region) -> Option<(f64, Option<&'
 
 /// Parse numeric forms using `r` and date/time text using `date_region`, without locale fallback.
 fn parse_numeric_regions(t: &str, sys: DateSystem, r: &Region, date_region: &Region) -> Option<(f64, Option<&'static str>)> {
+    parse_numeric_forms(t, r).or_else(|| parse_datetime(t, sys, date_region))
+}
+
+/// Number-only syntax, including accounting parentheses; never interprets a date or time.
+fn parse_numeric_forms(t: &str, r: &Region) -> Option<(f64, Option<&'static str>)> {
     // Parenthesised negatives: (100) = -100, and the accounting forms `$(100)` and `(5)%`.
     if let Some(inner) = parenthesized(t) {
         // Excel reads no sign and no nested parentheses inside: `(-5)`, `($-5)`, `((5))`.
@@ -95,11 +102,6 @@ fn parse_numeric_regions(t: &str, sys: DateSystem, r: &Region, date_region: &Reg
         let parsed = parse_plain(&inner, r).or_else(|| parse_fraction(&inner, r).map(|n| (n, Some("# ?/?"))));
         return parsed.map(|(n, f)| (-n, f));
     }
-    parse_unparenthesised(t, sys, r, date_region)
-}
-
-/// Try numeric forms in `r` and date/time text in `date_region` without accounting parentheses.
-fn parse_unparenthesised(t: &str, sys: DateSystem, r: &Region, date_region: &Region) -> Option<(f64, Option<&'static str>)> {
     if t.is_empty() {
         return None;
     }
@@ -108,9 +110,6 @@ fn parse_unparenthesised(t: &str, sys: DateSystem, r: &Region, date_region: &Reg
     }
     if let Some(res) = parse_fraction(t, r) {
         return Some((res, Some("# ?/?")));
-    }
-    if let Some(res) = parse_datetime(t, sys, date_region) {
-        return Some(res);
     }
     None
 }
@@ -492,6 +491,27 @@ fn parse_datetime(t: &str, sys: DateSystem, r: &Region) -> Option<(f64, Option<&
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Implicit date arguments reject padded dates without changing numeric or typed-cell parsing.
+    #[test]
+    fn implicit_date_text_rejects_outer_whitespace_only_for_dates() {
+        for sys in [DateSystem::D1900, DateSystem::D1904] {
+            for tag in ["en-US", "it-IT"] {
+                let region = crate::region::find(tag).unwrap();
+                let day = if tag == "en-US" { 2 } else { 1 };
+                let month = if tag == "en-US" { 1 } else { 2 };
+                let serial = serial_from_ymd(sys, 2026, month, day).unwrap();
+                assert_eq!(parse_date_argument_text_in("01/02/2026", sys, region), Some(serial));
+                for input in [" 01/02/2026", "01/02/2026 ", "   01/02/2026  ", " 01/02/2026 10:30 "] {
+                    assert_eq!(parse_date_argument_text_in(input, sys, region), None, "{tag}: {input:?}");
+                }
+                for (input, expected) in [(" 45000 ", 45000.0), (" 1,234.5 ", 1234.5), (" 50% ", 0.5), (" 1 1/2 ", 1.5), (" $(5) ", -5.0)] {
+                    assert_eq!(parse_date_argument_text_in(input, sys, region), Some(expected), "{tag}: {input:?}");
+                }
+                assert_eq!(parse_input_in(" 01/02/2026 ", sys, region).value, Value::number(serial));
+            }
+        }
+    }
 
     fn p(s: &str) -> Parsed {
         parse_input(s, DateSystem::D1900)
