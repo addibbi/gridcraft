@@ -1,11 +1,24 @@
 # Repairing an invalid PivotTable source
 
-> **Last updated:** 2026-10-27
+> **Last updated:** 2026-10-28
 
-An existing PivotTable can outlive its source's validity: an unused column header may be
-deleted, or its defined source name may disappear. Refresh must reject that invalid source,
-but **Change Data Source** must still accept a valid replacement. Previously, it validated
+An existing PivotTable can outlive its source's validity in GridCraft: an unused column header
+may be deleted, or its defined source name may disappear. GridCraft's current refresh validation
+rejects those sources, but **Change Data Source** must still accept a valid replacement. Previously, it validated
 the old source first and refused the repair itself.
+
+## Compatibility scope
+
+The blank-header reproduction describes GridCraft's validation, not a claim that every Excel
+entry point rejects the same source. In a [reviewer's reported Excel desktop COM checks](https://github.com/storytold/gridcraft/pull/1887#issuecomment-6459053459),
+refresh and source replacement accepted a cleared unused header and named its field `Field5`.
+The reviewer did not check Excel's Change Data Source dialog. The same report says Excel COM
+rejected empty/whitespace-only replacements and accepted a valid replacement after a defined
+source name was deleted. These are reported observations, not tests run by this contribution.
+
+This repair preserves GridCraft's replacement-header validation, protection and occupied-cell
+checks. Synthesizing names for blank headers would be a separate compatibility change; it is
+not needed to allow a valid replacement for a source GridCraft currently rejects.
 
 ## Generate a minimal example
 
@@ -78,6 +91,7 @@ constructed, which failures must preserve history, and what each regression veri
 
 | Date | Change |
 |---|---|
+| 2026-10-28 | Distinguish GridCraft's blank-header validation from reported Excel COM behavior; preserve replacement protections |
 | 2026-10-27 | Adapt source repair to the upstream pivot command modules; preserve explicit-source validation and atomic edits |
 | 2026-10-26 | Align with current main and shared workbook windows; preserve all six repair and empty-source regressions |
 | 2026-10-24 | Reject blank source replacements without falling back to the active selection; add source and history regression coverage |

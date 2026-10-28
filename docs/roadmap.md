@@ -1,6 +1,6 @@
 # Roadmap detail
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-27 · **Change:** minor (reject blank PivotTable source replacements and preserve source and history; tests run through cargo xtask test) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-28 · **Change:** trivial (clarify the source-repair compatibility scope; protections unchanged) · **Target:** Microsoft Excel (Microsoft 365)
 
 Forward-looking plan. The one-page summary is [`ROADMAP.md`](../ROADMAP.md); the ranked work
 list is [`gaps.md`](gaps.md); numbers and method are in
@@ -9,7 +9,10 @@ list is [`gaps.md`](gaps.md); numbers and method are in
 ## Current focus
 
 PivotTable source repair: **Change Data Source** can replace a source that has become
-invalid (for example, an unused column's header was deleted, or a defined name disappeared).
+invalid under GridCraft's current validation (for example, an unused column's header was
+deleted, or a defined name disappeared). The blank-header case is not a claim about every
+Excel entry point; the [compatibility notes](pivot-source-repair.md#compatibility-scope) distinguish
+reported COM observations from the unmeasured Excel dialog.
 The replacement is validated and refreshed as one undoable edit; invalid headers, protected
 sheets and occupied report cells still refuse the operation without partial changes.
 Missing, empty or whitespace-only replacements are rejected before selection-based defaults
@@ -123,6 +126,7 @@ to check our files, and Windows machines with the reported GPU drivers.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-28 | trivial | Clarify that blank-header source rejection is current GridCraft validation; preserve repair protections and distinguish reported Excel COM behavior |
 | 2026-10-27 | minor | Align PivotTable source repair with the upstream command modules; retain validation, protection and atomic undo/redo |
 | 2026-10-24 | minor | Reject blank PivotTable source replacements and cover source and undo/redo preservation with a valid active selection |
 | 2026-10-24 | minor | Align PivotTable source repair with current main and the consolidated engine integration-test binary |
