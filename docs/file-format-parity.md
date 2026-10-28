@@ -1,6 +1,6 @@
 # File-format parity
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-27 · **Change:** trivial (align the #722-based follow-up with main and its pivot module split; no behavior or score change) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
+> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-28 · **Change:** trivial (clarify GridCraft source-order reset versus reported Excel manual/ascending order; no behavior or score change) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
 
 Every format Excel opens or saves, with GridCraft's read and write support, fidelity and tests.
 Part of [target-app-parity.md](target-app-parity.md). **File formats: ~50% ready, 80–120 h**
@@ -22,6 +22,15 @@ groups their date order); `none` and `manual` retain it. Changing the date group
 from the old grouping, while reapplying the same grouping keeps its order. Both commands remain
 undoable. Synthetic regressions cover both axes, fixed-cell formula results, repeated save/reopen,
 a year label colliding with an ungrouped serial, and malformed cache references.
+
+The source-order reset is a **GridCraft extension**, not an Excel-equivalent reset for an
+ordinary, non-OLAP PivotTable. For source items `b, a, c, a, b, c`, it yields `b, a, c`;
+use `order: "asc"` for `a, b, c`. A [reviewer's reported Excel desktop COM checks](https://github.com/storytold/gridcraft/pull/2430#issuecomment-6459074365)
+found ascending order in a fresh report and manual sorting retained the current order rather
+than restoring source order. The reviewer did not successfully exercise date regrouping or run
+GridCraft's tests. The changed-grouping reset is covered by GridCraft's synthetic regressions;
+this document does not claim that it was compared with Excel.
+
 The stacked branch retains main's Enable show details option. A generated interaction test
 checks that Show Details selects the displayed manual-order cell's records before and after
 source-order resets, and still refuses to extract records while the option is off.
@@ -122,6 +131,7 @@ refresh. Counted under features (Get & Transform, ~10% ready), not here.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-28 | trivial | Label source-order reset as a GridCraft extension; separate reported Excel manual/ascending checks from unmeasured regrouping behavior |
 | 2026-10-27 | trivial | Align the #722-based follow-up with main 45f5ab18 and its pivot module split; preserve source-order reset, regrouping cleanup, cache-reference deduplication and Show Details protections |
 | 2026-10-25 | trivial | Align the #722-based follow-up with main and cover manual order/source-order reset alongside Enable show details |
 | 2026-10-24 | minor | Follow-up to #722: deduplicate manual item-order cache references before cloning labels; explicit source-order reset and changed date grouping discard old ranks, with Undo and synthetic round-trip regressions |
